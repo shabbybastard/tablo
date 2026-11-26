@@ -2,6 +2,7 @@
 
 #include <cstdio>
 
+#include "core/version.h"
 #include "fonts/fonts.h"
 #include "theme.h"
 #include "widgets.h"
@@ -81,7 +82,7 @@ void status_bar_create(StatusBar& bar, lv_obj_t* parent, const char* menu_text,
   }
   bar.wifi_dot = make_dot(bar.wifi_icon, 6, 16, 4, palette().muted);
 
-  bar.version = make_label(root, "v1.0.0", &theme().accent14);
+  bar.version = make_label(root, "v" FW_VERSION, &theme().accent14);
   lv_obj_set_pos(bar.version, 410, 10);
   lv_obj_set_size(bar.version, 58, 20);
   lv_obj_set_style_text_align(bar.version, LV_TEXT_ALIGN_RIGHT, 0);
@@ -109,11 +110,9 @@ void status_bar_update(StatusBar& bar, const AppState& state) {
   }
 
   char buffer[32];
-  if (state.fw_version[0] != '\0') {
-    std::snprintf(buffer, sizeof(buffer), "v%s", state.fw_version);
-  } else {
-    std::snprintf(buffer, sizeof(buffer), "v1.0.0");
-  }
+  const char* version =
+      state.fw_version[0] != '\0' ? state.fw_version : tablo::kFwVersion;
+  std::snprintf(buffer, sizeof(buffer), "v%s", version);
   set_label_text(bar.version, buffer);
 
   const bool update_available = state.ota.available || state.ota.downloading;

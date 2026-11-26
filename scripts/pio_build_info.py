@@ -1,9 +1,10 @@
 """Inject FW_VERSION into the ESP32 build.
 
-`FW_VERSION` from the environment wins (CI uses `1.0.<run_number>`). Local
-builds read the repository `VERSION` file; the final fallback is `1.0.0-dev`.
-The value is passed as a compiler definition so it is compiled into the
-firmware and compared with the GitHub Pages manifest at runtime.
+The version comes from the repository `VERSION` file, which is the single
+source for local builds and CI (`FW_VERSION` from the environment still wins if
+set explicitly). The final fallback is `0.0.0-dev`. The value is passed as a
+compiler definition so it is compiled into the firmware and compared with the
+GitHub Pages manifest at runtime.
 """
 import os
 
@@ -21,6 +22,6 @@ def read_version_file():
         return ""
 
 
-version = os.environ.get("FW_VERSION", "").strip() or read_version_file() or "1.0.0-dev"
+version = os.environ.get("FW_VERSION", "").strip() or read_version_file() or "0.0.0-dev"
 print(f"[tablo] FW_VERSION={version}")
 env.Append(BUILD_FLAGS=[f'-DFW_VERSION=\\"{version}\\"'])

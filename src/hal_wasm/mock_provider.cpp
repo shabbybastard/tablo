@@ -314,7 +314,7 @@ void MockProvider::applyFallback() {
   };
   for (size_t i = 0; i < kMaxPingTargets; ++i) state_.pings[i] = ping_defaults[i];
 
-  std::snprintf(ota_version_, sizeof(ota_version_), "1.0.42");
+  std::snprintf(ota_version_, sizeof(ota_version_), "1.0.2");
   state_.ota.available = false;
   state_.ota.checked = false;
   state_.ota.downloading = false;
@@ -325,7 +325,7 @@ void MockProvider::applyFallback() {
   state_.wifi_connected = true;
   state_.wifi_rssi = -52;
   std::snprintf(state_.ip, sizeof(state_.ip), "192.0.2.42");
-  std::snprintf(state_.fw_version, sizeof(state_.fw_version), "1.0.41");
+  std::snprintf(state_.fw_version, sizeof(state_.fw_version), "1.0.1");
   std::snprintf(state_.note, sizeof(state_.note), "mock_data.json не найден");
   state_.brightness = 80;
 }

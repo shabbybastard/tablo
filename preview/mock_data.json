@@ -19,14 +19,14 @@
   ],
   "ota": {
     "available": false,
-    "version": "1.0.42",
-    "status": "Установлена 1.0.41"
+    "version": "1.0.2",
+    "status": "Установлена 1.0.1"
   },
   "wifi": {
     "connected": true,
     "rssi": -52,
     "ip": "192.0.2.42"
   },
-  "fw_version": "1.0.41",
+  "fw_version": "1.0.1",
   "note": "Ночной режим включится в 23:00"
 }

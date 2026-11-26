@@ -47,7 +47,14 @@ add_executable(tablo
   ${HAL_WASM_SOURCES}
 )
 
-target_compile_definitions(tablo PRIVATE TABLO_PREVIEW=1)
+# Keep the preview in sync with the firmware version from VERSION.
+file(STRINGS "${PROJECT_ROOT}/VERSION" TABLO_VERSION LIMIT_COUNT 1)
+if(NOT TABLO_VERSION)
+  set(TABLO_VERSION "0.0.0-dev")
+endif()
+
+target_compile_definitions(tablo PRIVATE TABLO_PREVIEW=1
+  FW_VERSION="${TABLO_VERSION}")
 target_include_directories(tablo PRIVATE
   "${PROJECT_ROOT}/src"
   "${PROJECT_ROOT}/include"

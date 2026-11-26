@@ -31,11 +31,7 @@ const char* modal_version() {
   if (g_state.ota.version[0] != '\0') {
     return g_state.ota.version;
   }
-#ifdef TABLO_PREVIEW
-  return "1.0.42";
-#else
   return "";
-#endif
 }
 
 const char* modal_status() {

@@ -1,0 +1,32 @@
+{
+  "time": {
+    "hour": 21,
+    "minute": 47,
+    "date_text": "Чт, 26 ноя"
+  },
+  "weather": {
+    "valid": true,
+    "temp_c": -3,
+    "feels_like_c": -6,
+    "pm25": 12,
+    "aqi": 48,
+    "condition": "Облачно"
+  },
+  "pings": [
+    { "label": "GW", "configured": true, "online": true, "ms": 1 },
+    { "label": "VPS", "configured": true, "online": true, "ms": 12 },
+    { "label": "DNS", "configured": true, "online": true, "ms": 8 }
+  ],
+  "ota": {
+    "available": false,
+    "version": "1.0.42",
+    "status": "Установлена 1.0.41"
+  },
+  "wifi": {
+    "connected": true,
+    "rssi": -52,
+    "ip": "192.0.2.42"
+  },
+  "fw_version": "1.0.41",
+  "note": "Ночной режим включится в 23:00"
+}

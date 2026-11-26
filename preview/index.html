@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>tablo · 480×480 preview</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --page: #07090c;
+      --panel: #10151b;
+      --bezel: #1a222c;
+      --text: #e7edf5;
+      --muted: #7f8b9a;
+      --accent: #4fc3f7;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(900px 600px at 50% -10%, #16202b 0%, transparent 60%),
+        var(--page);
+      color: var(--text);
+      font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 22px;
+      overflow: hidden;
+    }
+    .stage {
+      padding: 18px;
+      border-radius: 26px;
+      background: linear-gradient(145deg, #202a35, #0d1218);
+      box-shadow:
+        0 0 0 1px #2a3745,
+        0 30px 80px rgba(0,0,0,.65),
+        inset 0 0 40px rgba(0,0,0,.5);
+    }
+    .screen-wrap {
+      position: relative;
+      width: 480px;
+      height: 480px;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #000;
+      box-shadow: inset 0 0 0 1px #000, inset 0 0 24px rgba(0,0,0,.7);
+    }
+    canvas#screen {
+      display: block;
+      width: 480px !important;
+      height: 480px !important;
+      background: #0b0f14;
+      touch-action: none;
+      image-rendering: auto;
+      cursor: crosshair;
+    }
+    .meta {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      color: var(--muted);
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      font-size: 11px;
+    }
+    .meta strong { color: var(--text); letter-spacing: .12em; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+    .hint { color: var(--muted); font-size: 11px; }
+    .hint b { color: #c7d2de; font-weight: 600; }
+    #overlay {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(4,7,10,.88);
+      backdrop-filter: blur(4px);
+      z-index: 10;
+      color: var(--text);
+      text-align: center;
+      padding: 24px;
+    }
+    #overlay.visible { display: flex; }
+    #overlay code { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="meta">
+    <span class="dot"></span>
+    <strong>tablo</strong>
+    <span>480 × 480 · WAVESHARE-STYLE PREVIEW</span>
+  </div>
+
+  <div class="stage">
+    <div class="screen-wrap">
+      <canvas id="screen" width="480" height="480"></canvas>
+    </div>
+  </div>
+
+  <div class="hint">
+    drag / swipe · <b>версия</b> открывает OTA-модалку · изменения <code>tablo.wasm</code> перезагружают страницу
+  </div>
+
+  <div id="overlay">
+    <div>
+      <div style="font-size:16px;margin-bottom:10px">tablo.wasm ещё не собран</div>
+      <div>Выполните <code>make wasm</code>, страница подхватит файл автоматически.</div>
+    </div>
+  </div>
+
+  <script>
+    window.__tabloLoaded = false;
+    var Module = {
+      canvas: document.getElementById('screen'),
+      print: function (text) { console.log('[tablo]', text); },
+      printErr: function (text) { console.warn('[tablo]', text); },
+      locateFile: function (path) { return path + '?v=' + Date.now(); },
+      onRuntimeInitialized: function () {
+        window.__tabloLoaded = true;
+        hideOverlay();
+      }
+    };
+
+    function showOverlay() { document.getElementById('overlay').classList.add('visible'); }
+    function hideOverlay() { document.getElementById('overlay').classList.remove('visible'); }
+
+    // The WASM HAL calls this when the brightness slider moves.
+    window.tabloSetBrightness = function (percent) {
+      var p = Math.max(0, Math.min(100, Number(percent) || 0));
+      var canvas = document.getElementById('screen');
+      var factor = 0.18 + 0.82 * (p / 100);
+      canvas.style.filter = 'brightness(' + factor.toFixed(3) + ')';
+    };
+
+    (function autoReload() {
+      var signature = null;
+      var wasMissing = false;
+
+      async function probe() {
+        try {
+          var res = await fetch('tablo.wasm?probe=' + Date.now(), {
+            method: 'HEAD',
+            cache: 'no-store'
+          });
+          if (!res.ok) {
+            wasMissing = true;
+            showOverlay();
+            setTimeout(probe, 1500);
+            return;
+          }
+          hideOverlay();
+          var next = (res.headers.get('Last-Modified') || '') + '|' +
+                     (res.headers.get('Content-Length') || '');
+          if (signature === null) {
+            signature = next;
+            // Only reload if the page was opened before the first build and
+            // the module had not been loaded yet. Never race the initial load.
+            if (wasMissing && !window.__tabloLoaded) {
+              location.reload();
+              return;
+            }
+          } else if (next !== signature) {
+            signature = next;
+            var overlay = document.getElementById('overlay');
+            overlay.innerHTML = '<div style="font-size:16px">Перезагрузка превью…</div>';
+            overlay.classList.add('visible');
+            setTimeout(function () { location.reload(); }, 120);
+            return;
+          }
+        } catch (e) {
+          console.warn('probe failed', e);
+        }
+        setTimeout(probe, 1500);
+      }
+
+      probe();
+    })();
+  </script>
+  <script src="tablo.js"></script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+# Local / generated
+.pio/
+.cache/
+build/
+dist/
+node_modules/
+compile_commands.json
+
+# Secrets — never commit real credentials
+include/secrets.h
+
+# Local agent instructions (kept out of the repository by project request)
+AGENTS.md
+
+# Generated WASM preview artifacts
+preview/tablo.js
+preview/tablo.wasm
+preview/tablo.data
+preview/tablo.worker.js
+preview/*.map
+
+# Host tests
+tests/host/build/
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Local copy of original board
+DEFAULT_ESP32-S3/

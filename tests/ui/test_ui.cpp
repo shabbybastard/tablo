@@ -88,7 +88,7 @@ int main() {
         "mock_provider state populated");
 
   tablo::AppState state = tablo::g_state.snapshot();
-  check(std::strcmp(state.fw_version, "1.0.1") == 0, "fw_version from mock");
+  check(std::strcmp(state.fw_version, "1.0.2") == 0, "fw_version from mock");
   check(state.weather.valid, "weather valid");
   check(state.wifi_connected && std::strcmp(state.ip, "192.0.2.42") == 0,
         "wifi/ip from mock");
@@ -146,7 +146,7 @@ int main() {
   tablo::ui_update(state);
   render_frames(10);
 
-  tablo::ui_test_show_update_modal("1.0.2", "Доступна новая прошивка");
+  tablo::ui_test_show_update_modal("1.0.3", "Доступна новая прошивка");
   tablo::ui_update(state);
   render_frames(40);
   check(tablo::ui_test_update_modal_visible(), "OTA modal is visible");
@@ -156,7 +156,7 @@ int main() {
   state.ota.available = true;
   state.ota.downloading = true;
   state.ota.progress = 42;
-  std::snprintf(state.ota.version, sizeof(state.ota.version), "1.0.2");
+  std::snprintf(state.ota.version, sizeof(state.ota.version), "1.0.3");
   std::snprintf(state.ota.status, sizeof(state.ota.status),
                 "Загрузка обновления: 42%%");
   tablo::g_state.set(state);
@@ -169,9 +169,9 @@ int main() {
   state.ota.available = false;
   state.ota.downloading = false;
   state.ota.progress = 100;
-  std::snprintf(state.fw_version, sizeof(state.fw_version), "1.0.2");
+  std::snprintf(state.fw_version, sizeof(state.fw_version), "1.0.3");
   std::snprintf(state.ota.status, sizeof(state.ota.status),
-                "Установлено 1.0.2");
+                "Установлено 1.0.3");
   tablo::g_state.set(state);
   tablo::ui_update(state);
   render_frames(20);

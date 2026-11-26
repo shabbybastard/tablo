@@ -94,7 +94,21 @@ jobs:
         run: |
           mkdir -p dist
           cp .pio/build/esp32s3/firmware.bin dist/firmware.bin
+          cp .pio/build/esp32s3/bootloader.bin dist/bootloader.bin
+          cp .pio/build/esp32s3/partitions.bin dist/partitions.bin
+          boot_app0="$(find "${HOME}/.platformio/packages" -path '*/tools/partitions/boot_app0.bin' -print -quit)"
+          if [[ -z "$boot_app0" ]]; then
+            echo "error: boot_app0.bin not found in PlatformIO packages" >&2
+            exit 1
+          fi
+          cp "$boot_app0" dist/boot_app0.bin
           python3 scripts/make_manifest.py "$VERSION" dist/firmware.bin dist/manifest.json
+          python3 scripts/make_flasher_manifest.py "$VERSION" dist/flasher.json
+          manifest_bytes="$(wc -c < dist/manifest.json)"
+          if (( manifest_bytes >= 8192 )); then
+            echo "error: manifest.json is ${manifest_bytes} bytes, device limit is 8192" >&2
+            exit 1
+          fi
           cat > dist/index.html <<EOF
           <!doctype html>
           <html lang="ru"><head><meta charset="utf-8">
@@ -107,13 +121,29 @@ jobs:
                  background:#111820}
             h1{margin:0 0 6px;font-size:24px}p{color:#91a0b0}
             a{color:#4fc3f7}code{color:#b9e6ff}
+            .flash{font:inherit;font-weight:600;color:#0b0f14;background:#4fc3f7;border:0;
+                   border-radius:9999px;padding:10px 24px;cursor:pointer}
+            .flash:hover{background:#7fd4fa}
+            .hint{font-size:13px;color:#6f8091}
           </style></head><body><main>
           <h1>tablo</h1>
           <p>Автономный дисплей Guition ESP32-4848S040.</p>
           <p>Версия: <code>${VERSION}</code></p>
-          <p><a href="firmware.bin">firmware.bin</a> · <a href="manifest.json">manifest.json</a></p>
+          <p><esp-web-install-button manifest="flasher.json">
+            <button slot="activate" class="flash">Прошить по USB</button>
+            <span slot="unsupported">Откройте в Chrome, Edge или Opera на компьютере</span>
+            <span slot="not-allowed">Для прошивки нужен HTTPS</span>
+          </esp-web-install-button></p>
+          <p class="hint">Подключите плату кабелем USB-C. Для чистой установки включите
+          Erase. Если порт не находится, зажмите BOOT и нажмите RESET.</p>
+          <p><a href="firmware.bin">firmware.bin</a> · <a href="manifest.json">manifest.json</a>
+          · <a href="flasher.json">flasher.json</a></p>
           <p><a href="https://github.com/shabbybastard/tablo/releases">Релизы на GitHub</a></p>
           <p>Этот адрес используется устройством для OTA-проверки.</p>
+          <!-- Web flasher: ESP Web Tools, Apache-2.0,
+               https://github.com/esphome/esp-web-tools -->
+          <script type="module"
+                  src="https://cdn.jsdelivr.net/npm/esp-web-tools@10.5.2/dist/web/install-button.js"></script>
           </main></body></html>
           EOF
 

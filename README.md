@@ -201,7 +201,8 @@ HTTP Basic Auth передаётся по локальной сети без ш�
 
 1. читает `VERSION` и собирает `pio run -e esp32s3` с этой `FW_VERSION`;
 2. считает SHA-256;
-3. публикует `firmware.bin`, `manifest.json` и минимальный `index.html`
+3. публикует `firmware.bin`, OTA-манифест `manifest.json`, манифест
+   веб-прошивальщика `flasher.json`, boot-образы и `index.html`
    через GitHub Pages Actions;
 4. создаёт GitHub Release `v<версия>` и прикладывает к нему `firmware.bin`
    и `manifest.json`, чтобы прошивку можно было скачать со страницы релиза.
@@ -213,15 +214,17 @@ HTTP Basic Auth передаётся по локальной сети без ш�
 коммите, из которого собрана прошивка. Если тег уже существует и указывает на
 другой коммит, CI остановится с ошибкой — сначала поднимите `VERSION`.
 Повторный запуск workflow на том же коммите разрешён и обновляет файлы релиза;
-если релиз был удалён, он будет создан заново на существующем теге. Workflow запускается только при изменениях `VERSION`, `src/`,
-`include/`, `cmake/`, `scripts/`, `platformio.ini`, `partitions.csv` или самого
-workflow, поэтому правки документации не трогают OTA-канал.
+если релиз был удалён, он будет создан заново на существующем теге.
+
+Workflow запускается только при изменениях `VERSION`, `src/`, `include/`,
+`cmake/`, `scripts/`, `platformio.ini`, `partitions.csv` или самого workflow,
+поэтому правки документации не трогают OTA-канал.
 
 Манифест:
 
 ```json
 {
-  "version": "1.0.2",
+  "version": "1.0.3",
   "sha256": "…",
   "bin_url": "https://shabbybastard.github.io/tablo/firmware.bin",
   "size": 1234567,
@@ -235,6 +238,24 @@ bin по HTTPS, проверяет SHA-256 и вызывает `Update.end(true)
 
 **Включите GitHub Pages**: `Settings → Pages → Source: GitHub Actions`.
 Без этого manifest будет отдавать 404.
+
+## Прошивка по USB
+
+На странице Pages есть веб-прошивальщик
+[ESP Web Tools](https://github.com/esphome/esp-web-tools) (Apache-2.0):
+
+1. откройте https://shabbybastard.github.io/tablo/ в Chrome, Edge или Opera
+   на компьютере (или Chrome на Android);
+2. подключите плату кабелем USB-C и нажмите «Прошить по USB»;
+3. для чистой установки включите Erase — это стирает Wi-Fi и настройки;
+4. если порт не определяется, зажмите BOOT и нажмите RESET.
+
+`flasher.json` описывает четыре части: `bootloader.bin` (`0x0`),
+`partitions.bin` (`0x8000`), `boot_app0.bin` (`0xe000`) и уже опубликованный
+`firmware.bin` (`0x10000`). Отдельный `factory.bin` не нужен: OTA и USB
+используют один и тот же app-образ, а boot-образы занимают ~31 КБ.
+
+Firefox и Safari Web Serial не поддерживают.
 
 ## Rescue mode
 
@@ -290,7 +311,7 @@ NVS namespace `tablo`: настройки хранятся одним blob-об�
 
 ## Версионирование
 
-- `VERSION` — единственный источник версии (сейчас `1.0.2`).
+- `VERSION` — единственный источник версии (сейчас `1.0.3`).
 - Локальная сборка и CI читают `VERSION`; `FW_VERSION` можно переопределить
   вручную, но в CI версия всегда совпадает с `VERSION`.
 - GitHub Release и тег `v<версия>` создаёт CI из `VERSION`.
@@ -306,3 +327,6 @@ NVS namespace `tablo`: настройки хранятся одним blob-об�
 
 MIT, см. [LICENSE](LICENSE). Init-последовательность ST7701 взята из MIT-проекта
 aquaElectronics/esp32-4848s040-st7701 с атрибуцией в исходнике.
+
+Веб-прошивальщик использует [ESP Web Tools](https://github.com/esphome/esp-web-tools)
+под лицензией Apache-2.0; библиотека подключается с CDN и не входит в репозиторий.

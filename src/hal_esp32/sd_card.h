@@ -34,7 +34,10 @@ class SdCard {
   void end();
   void poll();
 
-  void set_retry_interval(uint32_t ms) { retry_ms_ = ms; }
+  void set_retry_interval(uint32_t ms) {
+    retry_ms_ = ms;
+    backoff_ms_ = ms;
+  }
 
   State state() const { return state_; }
   bool mounted() const { return state_ == State::Mounted; }
@@ -48,6 +51,7 @@ class SdCard {
 
  private:
   bool try_mount();
+  bool card_responds();
   bool healthy();
   void unmount();
 
@@ -55,7 +59,10 @@ class SdCard {
   bool enabled_ = false;
   bool spi_started_ = false;
   bool attempted_ = false;
+  uint8_t probe_state_ = 0;  // 0 unknown/absent, 1 card responded to CMD0
+  uint8_t mount_failures_ = 0;
   uint32_t retry_ms_ = 2000;
+  uint32_t backoff_ms_ = 2000;
   uint32_t last_attempt_ms_ = 0;
   uint32_t last_health_ms_ = 0;
 };

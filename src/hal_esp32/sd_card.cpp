@@ -38,9 +38,14 @@ bool SdCard::begin(bool enabled) {
       state_ = State::Failed;
       return false;
     }
+    pinMode(board::SD_CS, OUTPUT);
+    digitalWrite(board::SD_CS, HIGH);
   }
   state_ = State::Absent;
   attempted_ = false;
+  probe_state_ = 0;
+  mount_failures_ = 0;
+  backoff_ms_ = retry_ms_;
   last_attempt_ms_ = 0;
   last_health_ms_ = 0;
   LOGI("sd: SPI ready (SCK=%d MISO=%d MOSI=%d CS=%d)", board::SD_SCK,
@@ -68,23 +73,79 @@ void SdCard::poll() {
       unmount();
       state_ = State::Absent;
       attempted_ = false;
+      probe_state_ = 0;
+      mount_failures_ = 0;
+      backoff_ms_ = retry_ms_;
       last_attempt_ms_ = millis();
     }
     return;
   }
 
-  if (attempted_ && millis() - last_attempt_ms_ < retry_ms_) {
+  if (attempted_ && millis() - last_attempt_ms_ < backoff_ms_) {
     return;
   }
   attempted_ = true;
   last_attempt_ms_ = millis();
+
+  // The board has no card-detect GPIO. A cheap CMD0 probe avoids running the
+  // full SD.begin()/FatFs mount (and its noisy library logs) when the slot is
+  // empty. If an inserted card answers, reinsertion resets any mount backoff.
+  if (!card_responds()) {
+    state_ = State::Absent;
+    if (probe_state_ != 0) {
+      probe_state_ = 0;
+      mount_failures_ = 0;
+      backoff_ms_ = retry_ms_;
+    }
+    return;
+  }
+  if (probe_state_ == 0) {
+    probe_state_ = 1;
+    mount_failures_ = 0;
+    backoff_ms_ = retry_ms_;
+  }
+
   if (try_mount()) {
     state_ = State::Mounted;
+    mount_failures_ = 0;
+    backoff_ms_ = retry_ms_;
     LOGI("sd: card mounted, %llu MB",
          static_cast<unsigned long long>(SD.cardSize() / (1024ULL * 1024ULL)));
   } else {
     state_ = State::Absent;
+    if (mount_failures_ < 5) ++mount_failures_;
+    uint32_t delay = retry_ms_;
+    for (uint8_t i = 0; i < mount_failures_ && delay < 60000U; ++i) delay *= 2;
+    backoff_ms_ = delay > 60000U ? 60000U : delay;
+    LOGW("sd: mount failed, retry in %lu ms",
+         static_cast<unsigned long>(backoff_ms_));
   }
+}
+
+bool SdCard::card_responds() {
+  if (!spi_started_) {
+    return false;
+  }
+  // CMD0 at 400 kHz: 0x01 means the card entered SPI idle state. With an empty
+  // slot MISO stays high (0xFF), so SD.begin() is never called.
+  SPI.beginTransaction(SPISettings(400000, MSBFIRST, SPI_MODE0));
+  digitalWrite(board::SD_CS, HIGH);
+  for (int i = 0; i < 10; ++i) {
+    SPI.transfer(0xFF);
+  }
+  digitalWrite(board::SD_CS, LOW);
+  static const uint8_t kCmd0[6] = {0x40, 0x00, 0x00, 0x00, 0x00, 0x95};
+  for (uint8_t byte : kCmd0) {
+    SPI.transfer(byte);
+  }
+  uint8_t response = 0xFF;
+  for (int i = 0; i < 8 && response == 0xFF; ++i) {
+    response = SPI.transfer(0xFF);
+  }
+  digitalWrite(board::SD_CS, HIGH);
+  SPI.transfer(0xFF);
+  SPI.endTransaction();
+  return response == 0x01;
 }
 
 bool SdCard::try_mount() {

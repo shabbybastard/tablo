@@ -44,8 +44,10 @@ bool equal_hex(const char* a, const char* b) {
 
 bool ota_check_manifest(const Settings& settings, ManifestInfo& manifest, OtaInfo& ota) {
   ota.checked = true;
+  ota.error = true;
   if (settings.ota_manifest_url[0] == '\0') {
     snprintf(ota.status, sizeof(ota.status), "URL манифеста не задан");
+    LOGW("ota: manifest URL is empty");
     return false;
   }
   if (!String(settings.ota_manifest_url).startsWith("https://")) {
@@ -66,10 +68,11 @@ bool ota_check_manifest(const Settings& settings, ManifestInfo& manifest, OtaInf
   if (!parse_manifest(response.body.c_str(), response.body.length(), parsed)) {
     snprintf(ota.status, sizeof(ota.status), "Некорректный manifest.json");
     ota.available = false;
-    LOGW("ota: invalid manifest");
+    LOGW("ota: invalid manifest (%u bytes)", static_cast<unsigned>(response.body.length()));
     return false;
   }
   manifest = parsed;
+  ota.error = false;
   if (version_is_newer(parsed.version, kFwVersion)) {
     ota.available = true;
     snprintf(ota.version, sizeof(ota.version), "%s", parsed.version);

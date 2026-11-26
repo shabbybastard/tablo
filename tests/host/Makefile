@@ -12,12 +12,14 @@ SOURCES := \
 	../../src/core/state_store.cpp \
 	../../src/core/settings_defaults.cpp \
 	../../src/core/schedule.cpp \
+	../../src/core/date_format.cpp \
 	../../src/core/settings_json.cpp \
 	../../src/core/settings_validate.cpp \
 	test_core.cpp
 
 HEADERS := \
 	../../src/core/app_state.h \
+	../../src/core/date_format.h \
 	../../src/core/json.h \
 	../../src/core/parsers.h \
 	../../src/core/schedule.h \

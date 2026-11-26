@@ -29,6 +29,12 @@ class StateStore {
                              const NightSchedule& schedule);
   void update_night_mode(bool night_mode, DisplayMode mode);
   void update_brightness(uint8_t brightness);
+  void update_options(DateFormat date_format, bool weather_enabled,
+                      const char* timezone);
+  void update_wifi_scan(const WifiScanInfo& scan);
+  void update_wifi_status(const char* status);
+  void update_wifi_identity(const char* ssid, const char* status);
+  void update_power(const PowerInfo& power);
 
  private:
   mutable std::mutex mutex_;

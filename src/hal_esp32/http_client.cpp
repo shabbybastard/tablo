@@ -8,6 +8,48 @@
 #include "log_ring.h"
 
 namespace tablo {
+namespace {
+
+/**
+ * Sink for HTTPClient::writeToStream(). Decoding the body through the library
+ * handles both Content-Length and chunked responses (Open-Meteo sends chunked),
+ * while the limit keeps a bad URL from exhausting the heap.
+ */
+class LimitedBodyStream : public Stream {
+ public:
+  explicit LimitedBodyStream(size_t limit) : limit_(limit) {
+    body_.reserve(limit_ < 4096 ? limit_ : 4096);
+  }
+
+  size_t write(uint8_t byte) override { return write(&byte, 1); }
+
+  size_t write(const uint8_t* data, size_t size) override {
+    // Returning 0 makes HTTPClient::writeToStreamDataBlock abort with a short
+    // write instead of draining a slow or endless chunked response.
+    if (truncated_ || body_.length() >= limit_ ||
+        size > limit_ - body_.length()) {
+      truncated_ = true;
+      return 0;
+    }
+    body_.concat(reinterpret_cast<const char*>(data), size);
+    return size;
+  }
+
+  int available() override { return 0; }
+  int read() override { return -1; }
+  int peek() override { return -1; }
+  void flush() override {}
+
+  const String& body() const { return body_; }
+  bool truncated() const { return truncated_; }
+
+ private:
+  String body_;
+  size_t limit_;
+  bool truncated_ = false;
+};
+
+}  // namespace
 
 bool http_get(const String& url, size_t max_body, HttpResponse& out) {
   out = HttpResponse();
@@ -44,7 +86,12 @@ bool http_get(const String& url, size_t max_body, HttpResponse& out) {
   const int status = http.GET();
   out.status = status;
   if (status <= 0) {
-    LOGW("http: GET %s -> %d", url.c_str(), status);
+    char tls_error[96] = {};
+    if (url.startsWith("https://")) {
+      secure.lastError(tls_error, sizeof(tls_error));
+    }
+    LOGW("http: GET %s -> %d (%s) tls=%s", url.c_str(), status,
+         HTTPClient::errorToString(status).c_str(), tls_error);
     http.end();
     stream_client->stop();
     return false;
@@ -52,25 +99,22 @@ bool http_get(const String& url, size_t max_body, HttpResponse& out) {
 
   const int announced = http.getSize();
   const size_t limit = max_body ? max_body : 16384;
-  String body;
-  body.reserve(announced > 0 && static_cast<size_t>(announced) < limit ? announced + 1 : limit / 2);
-  Stream* stream = http.getStreamPtr();
-  uint8_t buf[512];
-  while (stream && (http.connected() || stream->available()) && body.length() < limit) {
-    const size_t want = min(sizeof(buf), limit - body.length());
-    const int n = stream->readBytes(buf, want);
-    if (n <= 0) {
-      if (!http.connected()) break;
-      delay(2);
-      continue;
-    }
-    body.concat(reinterpret_cast<const char*>(buf), n);
+  LimitedBodyStream sink(limit);
+  const int written = http.writeToStream(&sink);
+  const bool complete =
+      written >= 0 && !sink.truncated() &&
+      (announced <= 0 || static_cast<size_t>(written) ==
+                             static_cast<size_t>(announced));
+  out.body = sink.body();
+  if (!complete) {
+    LOGW("http: %s status=%d read=%d expected=%d got=%u%s", url.c_str(),
+         status, written, announced, static_cast<unsigned>(out.body.length()),
+         sink.truncated() ? " (truncated)" : "");
   }
-  out.body = body;
   http.end();
   stream_client->stop();
   delay(40);
-  return true;
+  return complete;
 }
 
 }  // namespace tablo

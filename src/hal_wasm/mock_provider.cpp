@@ -210,6 +210,12 @@ bool MockProvider::load(const char* mock_path) {
 
   read_string(doc, "fw_version", state_.fw_version, sizeof(state_.fw_version));
   read_string(doc, "note", state_.note, sizeof(state_.note));
+  if (state_.weather.valid) state_.weather.weather_code = 3;  // Облачно
+
+  state_.power.valid = true;
+  state_.power.voltage_v = 5.02f;
+  state_.power.current_a = 0.26f;
+  state_.power.power_w = 1.31f;
 
   if (state_.brightness == 0) state_.brightness = 80;
   return true;
@@ -314,7 +320,7 @@ void MockProvider::applyFallback() {
   };
   for (size_t i = 0; i < kMaxPingTargets; ++i) state_.pings[i] = ping_defaults[i];
 
-  std::snprintf(ota_version_, sizeof(ota_version_), "1.0.3");
+  std::snprintf(ota_version_, sizeof(ota_version_), "1.0.4");
   state_.ota.available = false;
   state_.ota.checked = false;
   state_.ota.downloading = false;
@@ -325,9 +331,13 @@ void MockProvider::applyFallback() {
   state_.wifi_connected = true;
   state_.wifi_rssi = -52;
   std::snprintf(state_.ip, sizeof(state_.ip), "192.0.2.42");
-  std::snprintf(state_.fw_version, sizeof(state_.fw_version), "1.0.2");
+  std::snprintf(state_.fw_version, sizeof(state_.fw_version), "1.0.3");
   std::snprintf(state_.note, sizeof(state_.note), "mock_data.json не найден");
   state_.brightness = 80;
+  state_.power.valid = true;
+  state_.power.voltage_v = 5.02f;
+  state_.power.current_a = 0.26f;
+  state_.power.power_w = 1.31f;
 }
 
 MockProvider& mock_provider() {

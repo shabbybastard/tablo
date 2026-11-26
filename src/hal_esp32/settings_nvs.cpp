@@ -1,6 +1,8 @@
 #include "settings_nvs.h"
 
 #include <Arduino.h>
+
+#include <cstddef>
 #include <cstring>
 
 #include "log_ring.h"
@@ -10,7 +12,14 @@ namespace {
 constexpr const char* kNamespace = "tablo";
 constexpr const char* kBlobKey = "settings";
 constexpr uint32_t kBlobMagic = 0x54424C53u;  // "TBLS"
-constexpr uint16_t kBlobVersion = 1;
+constexpr uint16_t kBlobVersion = 2;
+// Layout from the first public release: used only to migrate existing devices.
+constexpr uint16_t kSettingsV1Size = 766;
+constexpr size_t kBlobV1Size = 780;
+// Version 2 appended fields; the v1 prefix must stay byte-identical for the
+// migration below.
+static_assert(offsetof(Settings, date_format) == kSettingsV1Size,
+              "new Settings fields must be appended after the v1 layout");
 
 struct SettingsBlob {
   uint32_t magic;
@@ -20,6 +29,9 @@ struct SettingsBlob {
   bool sd_hash_valid;
   Settings settings;
 };
+
+static_assert(offsetof(SettingsBlob, settings) + kSettingsV1Size == kBlobV1Size,
+              "v1 blob layout changed");
 
 void copy_str(char* dst, size_t cap, const String& value) {
   if (cap == 0) return;
@@ -41,6 +53,16 @@ bool NvsSettings::begin() {
   }
   load_locked();
   ready_ = true;
+  if (migrated_) {
+    if (write_blob_locked()) {
+      migrated_ = false;
+      LOGI("nvs: settings blob migrated to v%u", kBlobVersion);
+    } else {
+      dirty_ = true;
+      dirty_since_ = millis();
+      LOGE("nvs: settings blob migration write failed");
+    }
+  }
   LOGI("nvs: namespace '%s' ready", kNamespace);
   return true;
 }
@@ -49,15 +71,31 @@ void NvsSettings::load_locked() {
   const bool blob_present = prefs_.isKey(kBlobKey);
   bool blob_loaded = false;
 
-  if (blob_present && prefs_.getBytesLength(kBlobKey) == sizeof(SettingsBlob)) {
-    SettingsBlob blob{};
-    if (prefs_.getBytes(kBlobKey, &blob, sizeof(blob)) == sizeof(blob) &&
-        blob.magic == kBlobMagic && blob.version == kBlobVersion &&
-        blob.size == sizeof(Settings)) {
-      settings_ = blob.settings;
-      sd_hash_ = blob.sd_hash;
-      sd_hash_valid_ = blob.sd_hash_valid;
-      blob_loaded = true;
+  if (blob_present) {
+    const size_t blob_length = prefs_.getBytesLength(kBlobKey);
+    if (blob_length == sizeof(SettingsBlob)) {
+      SettingsBlob blob{};
+      if (prefs_.getBytes(kBlobKey, &blob, sizeof(blob)) == sizeof(blob) &&
+          blob.magic == kBlobMagic && blob.version == kBlobVersion &&
+          blob.size == sizeof(Settings)) {
+        settings_ = blob.settings;
+        sd_hash_ = blob.sd_hash;
+        sd_hash_valid_ = blob.sd_hash_valid;
+        blob_loaded = true;
+      }
+    } else if (blob_length == kBlobV1Size) {
+      SettingsBlob blob{};
+      if (prefs_.getBytes(kBlobKey, &blob, kBlobV1Size) == kBlobV1Size &&
+          blob.magic == kBlobMagic && blob.version == 1 &&
+          blob.size == kSettingsV1Size) {
+        settings_ = blob.settings;
+        settings_.date_format = DateFormat::DayMonthWeekday;
+        settings_.weather_enabled = true;
+        sd_hash_ = blob.sd_hash;
+        sd_hash_valid_ = blob.sd_hash_valid;
+        migrated_ = true;
+        blob_loaded = true;
+      }
     }
   }
 
@@ -151,6 +189,35 @@ void NvsSettings::set_night_mode(bool enabled) {
   std::lock_guard<std::mutex> lock(mutex_);
   if (settings_.night_mode == enabled) return;
   settings_.night_mode = enabled;
+  dirty_ = true;
+  dirty_since_ = millis();
+}
+
+void NvsSettings::set_timezone(const char* timezone) {
+  if (timezone == nullptr) return;
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (std::strncmp(settings_.timezone, timezone, sizeof(settings_.timezone)) == 0) {
+    return;
+  }
+  std::strncpy(settings_.timezone, timezone, sizeof(settings_.timezone) - 1);
+  settings_.timezone[sizeof(settings_.timezone) - 1] = '\0';
+  dirty_ = true;
+  dirty_since_ = millis();
+}
+
+void NvsSettings::set_date_format(DateFormat format) {
+  if (static_cast<uint8_t>(format) > 2) return;
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (settings_.date_format == format) return;
+  settings_.date_format = format;
+  dirty_ = true;
+  dirty_since_ = millis();
+}
+
+void NvsSettings::set_weather_enabled(bool enabled) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (settings_.weather_enabled == enabled) return;
+  settings_.weather_enabled = enabled;
   dirty_ = true;
   dirty_since_ = millis();
 }

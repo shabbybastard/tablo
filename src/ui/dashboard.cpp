@@ -24,6 +24,22 @@ void set_long_label(lv_obj_t* label, int32_t width, int32_t height,
   lv_obj_set_style_text_align(label, align, 0);
 }
 
+const char* weather_symbol(int16_t code) {
+  if (code < 0) return "";
+  if (code == 0 || code == 1 || code == 2) return "\xE2\x98\x80";  // ☀
+  if (code == 3) return "\xE2\x98\x81";                            // ☁
+  if (code == 45 || code == 48) return "\xE2\x89\x8B";             // ≋ fog
+  if (code >= 51 && code <= 57) return "\xE2\x98\x82";             // ☂ drizzle
+  if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) {
+    return "\xE2\x98\x94";                                         // ☔ rain
+  }
+  if ((code >= 71 && code <= 77) || (code >= 85 && code <= 86)) {
+    return "\xE2\x9D\x84";                                         // ❄ snow
+  }
+  if (code >= 95) return "\xE2\x9A\xA1";                           // ⚡ storm
+  return "\xE2\x98\x81";
+}
+
 void format_ip(const AppState& state, char* out, size_t out_size) {
   if (state.ip[0] != '\0') {
     std::snprintf(out, out_size, "IP %s", state.ip);
@@ -92,9 +108,13 @@ void dashboard_create(Dashboard& d, lv_event_cb_t version_cb,
   lv_obj_set_pos(d.weather_temp, 14, 31);
   set_long_label(d.weather_temp, 80, 38, LV_LABEL_LONG_MODE_CLIP);
 
+  d.weather_icon = make_label(weather_card, "", &theme().text18);
+  lv_obj_set_pos(d.weather_icon, 96, 43);
+  set_long_label(d.weather_icon, 24, 24, LV_LABEL_LONG_MODE_CLIP);
+
   d.weather_condition = make_label(weather_card, "Нет данных", &theme().text18);
-  lv_obj_set_pos(d.weather_condition, 96, 43);
-  set_long_label(d.weather_condition, 112, 24, LV_LABEL_LONG_MODE_DOTS);
+  lv_obj_set_pos(d.weather_condition, 124, 43);
+  set_long_label(d.weather_condition, 84, 24, LV_LABEL_LONG_MODE_DOTS);
 
   d.weather_feels = make_label(weather_card, "Ощущается как --°",
                                 &theme().muted14);
@@ -234,7 +254,7 @@ void dashboard_update(Dashboard& d, const AppState& state) {
       std::snprintf(buffer, sizeof(buffer), "Доступно обновление");
     }
   } else if (state.ota.checked) {
-    ota_kind = 1;
+    ota_kind = state.ota.error ? 4 : 1;
     if (state.ota.status[0] != '\0') {
       std::snprintf(buffer, sizeof(buffer), "%s", state.ota.status);
     } else {
@@ -250,6 +270,8 @@ void dashboard_update(Dashboard& d, const AppState& state) {
       color = p.accent;
     } else if (ota_kind == 1) {
       color = p.green;
+    } else if (ota_kind == 4) {
+      color = p.red;
     }
     lv_obj_set_style_text_color(d.ota_label, color, 0);
     d.last_ota_kind = ota_kind;
@@ -261,6 +283,8 @@ void dashboard_update(Dashboard& d, const AppState& state) {
     std::snprintf(buffer, sizeof(buffer), "%d°",
                   static_cast<int>(state.weather.temp_c));
     set_label_text(d.weather_temp, buffer);
+    set_label_text_safe(d.weather_icon,
+                        weather_symbol(state.weather.weather_code));
     set_label_text_safe(d.weather_condition,
                         state.weather.condition[0] != '\0'
                             ? state.weather.condition
@@ -280,7 +304,11 @@ void dashboard_update(Dashboard& d, const AppState& state) {
     set_label_text(d.aqi_quality, buffer);
   } else {
     set_label_text(d.weather_temp, "--°");
-    set_label_text(d.weather_condition, "Нет данных");
+    set_label_text(d.weather_icon, "");
+    set_label_text_safe(d.weather_condition,
+                        state.weather.status[0] != '\0'
+                            ? state.weather.status
+                            : "Нет данных");
     set_label_text(d.weather_feels, "Ощущается как --°");
     set_label_text(d.aqi_label, "AQI --");
     set_label_text(d.pm_label, "PM2.5 -- мкг/м3");

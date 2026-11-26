@@ -15,7 +15,7 @@
 /*====================
    MEMORY SETTINGS
  *====================*/
-#define LV_MEM_SIZE (96U * 1024U)
+#define LV_MEM_SIZE (120U * 1024U)
 #define LV_USE_STDLIB_MALLOC LV_STDLIB_BUILTIN
 #define LV_USE_STDLIB_STRING LV_STDLIB_BUILTIN
 #define LV_USE_STDLIB_SPRINTF LV_STDLIB_BUILTIN

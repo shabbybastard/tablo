@@ -88,7 +88,7 @@ int main() {
         "mock_provider state populated");
 
   tablo::AppState state = tablo::g_state.snapshot();
-  check(std::strcmp(state.fw_version, "1.0.2") == 0, "fw_version from mock");
+  check(std::strcmp(state.fw_version, "1.0.3") == 0, "fw_version from mock");
   check(state.weather.valid, "weather valid");
   check(state.wifi_connected && std::strcmp(state.ip, "192.0.2.42") == 0,
         "wifi/ip from mock");
@@ -142,11 +142,37 @@ int main() {
   state.display_mode = tablo::DisplayMode::Day;
   state.schedule.enabled = false;
   tablo::g_state.set(state);
+
+  tablo::ui_test_show_options();
+  tablo::ui_update(state);
+  render_frames(30);
+  check(lv_screen_active() != dashboard, "options screen loaded");
+  check(framebuffer_has_content(), "options screen rendered visible pixels");
+  const uint32_t options_hash = framebuffer_checksum();
+  check(options_hash != settings_hash, "options screen changed the framebuffer");
+
+  tablo::ui_test_show_wifi();
+  tablo::ui_update(tablo::g_state.snapshot());
+  render_frames(40);
+  check(lv_screen_active() != dashboard, "wifi screen loaded");
+  check(framebuffer_has_content(), "wifi screen rendered visible pixels");
+  check(framebuffer_checksum() != options_hash,
+        "wifi screen changed the framebuffer");
+
+  tablo::ui_test_click_wifi_connect();
+  render_frames(40);
+  check(tablo::ui_test_wifi_password_visible(), "wifi password modal shown");
+  check(framebuffer_has_content(), "wifi password modal rendered");
+  tablo::ui_test_dismiss_wifi_password();
+  render_frames(10);
+  check(!tablo::ui_test_wifi_password_visible(),
+        "wifi password modal dismissed");
+
   tablo::ui_test_show_settings();
   tablo::ui_update(state);
   render_frames(10);
 
-  tablo::ui_test_show_update_modal("1.0.3", "Доступна новая прошивка");
+  tablo::ui_test_show_update_modal("1.0.4", "Доступна новая прошивка");
   tablo::ui_update(state);
   render_frames(40);
   check(tablo::ui_test_update_modal_visible(), "OTA modal is visible");
@@ -156,7 +182,7 @@ int main() {
   state.ota.available = true;
   state.ota.downloading = true;
   state.ota.progress = 42;
-  std::snprintf(state.ota.version, sizeof(state.ota.version), "1.0.3");
+  std::snprintf(state.ota.version, sizeof(state.ota.version), "1.0.4");
   std::snprintf(state.ota.status, sizeof(state.ota.status),
                 "Загрузка обновления: 42%%");
   tablo::g_state.set(state);
@@ -169,9 +195,9 @@ int main() {
   state.ota.available = false;
   state.ota.downloading = false;
   state.ota.progress = 100;
-  std::snprintf(state.fw_version, sizeof(state.fw_version), "1.0.3");
+  std::snprintf(state.fw_version, sizeof(state.fw_version), "1.0.4");
   std::snprintf(state.ota.status, sizeof(state.ota.status),
-                "Установлено 1.0.3");
+                "Установлено 1.0.4");
   tablo::g_state.set(state);
   tablo::ui_update(state);
   render_frames(20);

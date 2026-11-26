@@ -73,7 +73,7 @@ void make_ghost_button(lv_obj_t* button) {
 
 void settings_create(SettingsScreen& s, lv_event_cb_t version_cb,
                      lv_event_cb_t gesture_cb, lv_event_cb_t menu_cb,
-                     lv_event_cb_t schedule_cb) {
+                     lv_event_cb_t schedule_cb, lv_event_cb_t options_cb) {
   lv_obj_t* scr = lv_obj_create(nullptr);
   lv_obj_remove_style_all(scr);
   lv_obj_add_style(scr, &theme().screen, 0);
@@ -94,6 +94,24 @@ void settings_create(SettingsScreen& s, lv_event_cb_t version_cb,
   lv_obj_t* subtitle = make_label(scr, "Экран и система", &theme().muted14);
   lv_obj_set_pos(subtitle, 14, 86);
   lv_obj_set_size(subtitle, 452, 18);
+
+  lv_obj_t* options_button = lv_button_create(scr);
+  lv_obj_remove_style_all(options_button);
+  lv_obj_add_style(options_button, &theme().button_ghost, 0);
+  lv_obj_add_style(options_button, &theme().button_ghost_pressed,
+                   LV_STATE_PRESSED);
+  lv_obj_set_pos(options_button, 300, 50);
+  lv_obj_set_size(options_button, 164, 32);
+  lv_obj_set_style_shadow_width(options_button, 0, 0);
+  remove_flags(options_button, LV_OBJ_FLAG_SCROLLABLE);
+  if (options_cb != nullptr) {
+    lv_obj_add_event_cb(options_button, options_cb, LV_EVENT_CLICKED, &s);
+  }
+  lv_obj_t* options_label = make_label(options_button, "Экран и сеть →",
+                                       &theme().text14);
+  lv_obj_set_size(options_label, 156, 22);
+  lv_obj_set_style_text_align(options_label, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_center(options_label);
 
   lv_obj_t* panel = make_card(scr, 12, 108, 456, 286);
 

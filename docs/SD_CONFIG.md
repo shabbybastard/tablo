@@ -64,6 +64,8 @@
 | `brightness` | integer | нет | 10…100 |
 | `night_mode` | bool | нет | ручной ночной режим |
 | `auto_ota` | bool | нет | |
+| `weather_enabled` | bool | нет | загружать погоду и AQI |
+| `date_format` | integer | нет | `0` — `26 ноя · Чт`, `1` — `Чт, 26 ноя`, `2` — `26.11.2026` |
 | `night_schedule_enabled` | bool | нет | авторежим вечер/ночь/день |
 | `evening_start` | string | нет | `HH:MM`, по умолчанию `18:00` |
 | `night_start` | string | нет | `HH:MM`, по умолчанию `23:00` |

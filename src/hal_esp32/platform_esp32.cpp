@@ -65,6 +65,60 @@ class Esp32Platform final : public IPlatform {
          static_cast<unsigned>(schedule.day_min));
   }
 
+  void setTimezone(const char* timezone) override {
+    if (timezone == nullptr || timezone[0] == '\0') return;
+    if (g_settings) g_settings->set_timezone(timezone);
+    const Settings settings = g_settings ? g_settings->get() : Settings{};
+    g_state.update_options(settings.date_format, settings.weather_enabled,
+                           settings.timezone);
+    if (g_net) g_net->request_timezone_apply();
+    LOGI("ui: timezone=%s", timezone);
+  }
+
+  void setDateFormat(DateFormat format) override {
+    if (g_settings) g_settings->set_date_format(format);
+    const Settings settings = g_settings ? g_settings->get() : Settings{};
+    g_state.update_options(settings.date_format, settings.weather_enabled,
+                           settings.timezone);
+    LOGI("ui: date format=%u", static_cast<unsigned>(format));
+  }
+
+  void setWeatherEnabled(bool enabled) override {
+    if (g_settings) g_settings->set_weather_enabled(enabled);
+    const Settings settings = g_settings ? g_settings->get() : Settings{};
+    g_state.update_options(settings.date_format, settings.weather_enabled,
+                           settings.timezone);
+    if (!enabled) {
+      WeatherInfo weather;
+      snprintf(weather.status, sizeof(weather.status), "Погода выключена");
+      g_state.update_weather(weather);
+    } else if (g_net) {
+      g_net->request_weather_refresh();
+    }
+    LOGI("ui: weather=%s", enabled ? "on" : "off");
+  }
+
+  void requestWifiScan() override {
+    g_state.update_wifi_status("");
+    if (g_net) g_net->request_wifi_scan();
+  }
+
+  void connectWifi(const char* ssid, const char* password) override {
+    if (!g_settings || ssid == nullptr || ssid[0] == '\0') return;
+    Settings settings = g_settings->get();
+    snprintf(settings.wifi_ssid, sizeof(settings.wifi_ssid), "%s", ssid);
+    snprintf(settings.wifi_password, sizeof(settings.wifi_password), "%s",
+             password != nullptr ? password : "");
+    if (!g_settings->save_checked(settings)) {
+      g_state.update_wifi_status("Не удалось сохранить Wi-Fi");
+      LOGE("ui: failed to save Wi-Fi credentials");
+      return;
+    }
+    g_state.update_wifi_identity(ssid, "Сохранено, перезагрузка...");
+    LOGI("ui: wifi credentials saved for '%s', rebooting", ssid);
+    reboot();
+  }
+
   void checkForUpdates() override {
     if (g_net) g_net->request_update_check();
     OtaInfo ota = g_state.snapshot().ota;

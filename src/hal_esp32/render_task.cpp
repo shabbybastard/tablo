@@ -8,6 +8,7 @@
 
 #include "core/state_store.h"
 #include "log_ring.h"
+#include "power_monitor.h"
 #include "ui/ui.h"
 
 namespace tablo {
@@ -48,6 +49,7 @@ void render_task(void*) {
       vTaskDelay(pdMS_TO_TICKS(20));
       continue;
     }
+    power_monitor_poll();
     lv_timer_handler();
     if (millis() - last_ui > 200) {
       last_ui = millis();

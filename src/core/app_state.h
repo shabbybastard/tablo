@@ -3,11 +3,13 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "core/date_format.h"
 #include "core/schedule.h"
 
 namespace tablo {
 
 constexpr size_t kMaxPingTargets = 3;
+constexpr size_t kMaxWifiScan = 12;
 
 struct TimeInfo {
   bool valid = false;
@@ -22,7 +24,9 @@ struct WeatherInfo {
   int16_t feels_like_c = 0;
   int16_t pm25 = 0;
   int16_t aqi = 0;
+  int16_t weather_code = -1;
   char condition[24] = "";
+  char status[40] = "";
 };
 
 struct PingInfo {
@@ -32,10 +36,18 @@ struct PingInfo {
   uint16_t ms = 0;
 };
 
+struct PowerInfo {
+  bool valid = false;
+  float voltage_v = 0;
+  float current_a = 0;
+  float power_w = 0;
+};
+
 struct OtaInfo {
   bool available = false;
   bool downloading = false;
   bool checked = false;
+  bool error = false;
   int progress = 0;
   char version[24] = "";
   char status[48] = "";
@@ -68,6 +80,19 @@ struct SdImportInfo {
   char error[192] = "";
 };
 
+struct WifiScanEntry {
+  char ssid[33] = "";
+  int8_t rssi = 0;
+  bool secure = false;
+};
+
+struct WifiScanInfo {
+  bool scanning = false;
+  uint8_t count = 0;
+  uint32_t generation = 0;
+  WifiScanEntry entries[kMaxWifiScan];
+};
+
 struct AppState {
   TimeInfo time;
   WeatherInfo weather;
@@ -80,6 +105,13 @@ struct AppState {
   bool night_mode = false;
   DisplayMode display_mode = DisplayMode::Day;
   NightSchedule schedule;
+  DateFormat date_format = DateFormat::DayMonthWeekday;
+  bool weather_enabled = true;
+  char timezone[48] = "MSK-3";
+  WifiScanInfo wifi_scan;
+  char wifi_ssid[33] = "";
+  char wifi_status[64] = "";
+  PowerInfo power;
   char fw_version[24] = "";
   char note[96] = "";
   uint32_t uptime_s = 0;

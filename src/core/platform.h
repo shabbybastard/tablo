@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+#include "core/date_format.h"
 #include "core/schedule.h"
 
 namespace tablo {
@@ -25,6 +26,11 @@ class IPlatform {
   virtual void setBrightness(uint8_t percent) = 0;
   virtual void setNightMode(bool on) = 0;
   virtual void setNightSchedule(const NightSchedule& schedule) = 0;
+  virtual void setTimezone(const char* timezone) = 0;
+  virtual void setDateFormat(DateFormat format) = 0;
+  virtual void setWeatherEnabled(bool enabled) = 0;
+  virtual void requestWifiScan() = 0;
+  virtual void connectWifi(const char* ssid, const char* password) = 0;
   virtual void checkForUpdates() = 0;
   virtual void installUpdate() = 0;
   virtual void reboot() = 0;

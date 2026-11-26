@@ -159,8 +159,12 @@ bool parse_openmeteo_weather(const char* json, size_t len, WeatherInfo& out) {
   WeatherInfo weather = out;
   weather.temp_c = clamp_int16(temperature);
   weather.feels_like_c = clamp_int16(apparent);
+  weather.weather_code =
+      weather_code >= 0 && weather_code <= 99 ? static_cast<int16_t>(weather_code)
+                                              : -1;
   copy_text(weather.condition, sizeof(weather.condition),
             wmo_condition_ru(static_cast<int>(weather_code)));
+  weather.status[0] = '\0';
   weather.valid = true;
 
   out = weather;

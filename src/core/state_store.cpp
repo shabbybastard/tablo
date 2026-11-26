@@ -114,4 +114,38 @@ void StateStore::update_brightness(uint8_t brightness) {
   ++state_.revision;
 }
 
+void StateStore::update_options(DateFormat date_format, bool weather_enabled,
+                                const char* timezone) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  state_.date_format = date_format;
+  state_.weather_enabled = weather_enabled;
+  copy_text(state_.timezone, sizeof(state_.timezone), timezone);
+  ++state_.revision;
+}
+
+void StateStore::update_wifi_scan(const WifiScanInfo& scan) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  state_.wifi_scan = scan;
+  ++state_.revision;
+}
+
+void StateStore::update_wifi_status(const char* status) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  copy_text(state_.wifi_status, sizeof(state_.wifi_status), status);
+  ++state_.revision;
+}
+
+void StateStore::update_wifi_identity(const char* ssid, const char* status) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  copy_text(state_.wifi_ssid, sizeof(state_.wifi_ssid), ssid);
+  copy_text(state_.wifi_status, sizeof(state_.wifi_status), status);
+  ++state_.revision;
+}
+
+void StateStore::update_power(const PowerInfo& power) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  state_.power = power;
+  ++state_.revision;
+}
+
 }  // namespace tablo

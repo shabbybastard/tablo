@@ -30,6 +30,8 @@ constexpr const char kExampleJson[] = R"json({
   "brightness": 80,
   "night_mode": false,
   "auto_ota": true,
+  "weather_enabled": true,
+  "date_format": 0,
   "night_schedule_enabled": false,
   "evening_start": "18:00",
   "night_start": "23:00",
@@ -231,6 +233,20 @@ bool parse_settings_json(const char* json, size_t len, Settings& out, char* erro
   }
   if (!read_bool_field(doc, "auto_ota", settings.auto_ota, error, error_cap)) {
     return false;
+  }
+  if (!read_bool_field(doc, "weather_enabled", settings.weather_enabled, error,
+                       error_cap)) {
+    return false;
+  }
+  if (doc.has("date_format")) {
+    if (!read_int_field(doc, "date_format", number, error, error_cap, true)) {
+      return false;
+    }
+    if (number < 0 || number > 2) {
+      set_field_error(error, error_cap, "date_format", "допустимо 0..2");
+      return false;
+    }
+    settings.date_format = static_cast<DateFormat>(number);
   }
   if (!read_bool_field(doc, "night_schedule_enabled", settings.schedule.enabled,
                        error, error_cap)) {

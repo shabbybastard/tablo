@@ -17,6 +17,7 @@
 #include "log_ring.h"
 #include "net_worker.h"
 #include "platform_esp32.h"
+#include "power_monitor.h"
 #include "qemu.h"
 #include "render.h"
 #include "sd_config.h"
@@ -70,6 +71,10 @@ void fill_initial_state(const tablo::Settings& settings) {
   tablo::AppState state;
   state.brightness = settings.brightness;
   state.schedule = settings.schedule;
+  state.date_format = settings.date_format;
+  state.weather_enabled = settings.weather_enabled;
+  copy_text(state.timezone, sizeof(state.timezone), settings.timezone);
+  copy_text(state.wifi_ssid, sizeof(state.wifi_ssid), settings.wifi_ssid);
   if (settings.schedule.enabled) {
     // The clock is not valid yet; the schedule's invalid-time fallback is Day.
     state.display_mode = tablo::DisplayMode::Day;
@@ -277,6 +282,7 @@ void setup() {
       if (!touch_ok) {
         LOGW("touch: controller not found, UI is read-only");
       }
+      tablo::power_monitor_begin();
       tablo::ui_init(setup_active);
       tablo::touch_lvgl_create();
       tablo::platform_bind(&g_settings, nullptr);

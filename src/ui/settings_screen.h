@@ -37,7 +37,7 @@ struct SettingsScreen {
 
 void settings_create(SettingsScreen& settings, lv_event_cb_t version_cb,
                      lv_event_cb_t gesture_cb, lv_event_cb_t menu_cb,
-                     lv_event_cb_t schedule_cb);
+                     lv_event_cb_t schedule_cb, lv_event_cb_t options_cb);
 void settings_update(SettingsScreen& settings, const AppState& state);
 
 }  // namespace ui

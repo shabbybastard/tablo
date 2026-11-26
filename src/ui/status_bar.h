@@ -13,6 +13,7 @@ struct StatusBar {
   lv_obj_t* root = nullptr;
   lv_obj_t* menu_button = nullptr;
   lv_obj_t* menu_label = nullptr;
+  lv_obj_t* power = nullptr;
   lv_obj_t* wifi_icon = nullptr;
   lv_obj_t* wifi_arc[3] = {};
   lv_obj_t* wifi_dot = nullptr;

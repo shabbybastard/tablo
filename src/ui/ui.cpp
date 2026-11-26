@@ -4,18 +4,22 @@
 
 #include "dashboard.h"
 #include "fonts/fonts.h"
+#include "options_screen.h"
 #include "schedule_screen.h"
 #include "sd_import_modal.h"
 #include "settings_screen.h"
 #include "setup_screen.h"
 #include "theme.h"
 #include "update_modal.h"
+#include "wifi_screen.h"
 
 namespace tablo {
 namespace {
 
 ui::Dashboard g_dashboard;
 ui::SettingsScreen g_settings;
+ui::OptionsScreen g_options;
+ui::WifiScreen g_wifi;
 ui::ScheduleScreen g_schedule;
 ui::SetupScreen g_setup;
 ui::UpdateModal g_modal;
@@ -72,6 +76,17 @@ void menu_clicked(lv_event_t*) {
 void schedule_clicked(lv_event_t*) { load_screen(g_schedule.screen); }
 
 void schedule_back_cb(lv_event_t*) { load_screen(g_settings.screen); }
+
+void options_clicked(lv_event_t*) { load_screen(g_options.screen); }
+
+void options_back_cb(lv_event_t*) { load_screen(g_settings.screen); }
+
+void wifi_clicked(lv_event_t*) {
+  ui::wifi_refresh(g_wifi);
+  load_screen(g_wifi.screen);
+}
+
+void wifi_back_cb(lv_event_t*) { load_screen(g_options.screen); }
 
 void navigate_screen(lv_dir_t dir) {
   static uint32_t last_nav = 0;
@@ -142,7 +157,9 @@ void ui_init(bool setup_active) {
 
   ui::dashboard_create(g_dashboard, version_clicked, nullptr, menu_clicked);
   ui::settings_create(g_settings, version_clicked, nullptr, menu_clicked,
-                       schedule_clicked);
+                      schedule_clicked, options_clicked);
+  ui::options_create(g_options, version_clicked, options_back_cb, wifi_clicked);
+  ui::wifi_create(g_wifi, version_clicked, wifi_back_cb);
   ui::schedule_screen_create(g_schedule, schedule_back_cb);
   ui::setup_screen_create(g_setup);
   ui::update_modal_create(g_modal);
@@ -182,6 +199,8 @@ void ui_update(const AppState& state) {
 
   ui::dashboard_update(g_dashboard, g_state);
   ui::settings_update(g_settings, g_state);
+  ui::options_update(g_options, g_state);
+  ui::wifi_update(g_wifi, g_state);
   ui::schedule_screen_update(g_schedule, g_state);
   ui::setup_screen_update(g_setup, g_state);
   ui::update_modal_update(g_modal, g_state);
@@ -227,6 +246,31 @@ void ui_test_show_schedule() {
     lv_screen_load(g_schedule.screen);
   }
 }
+
+void ui_test_show_options() {
+  if (g_ready && g_options.screen != nullptr) {
+    lv_screen_load(g_options.screen);
+  }
+}
+
+void ui_test_show_wifi() {
+  if (g_ready && g_wifi.screen != nullptr) {
+    ui::wifi_refresh(g_wifi);
+    lv_screen_load(g_wifi.screen);
+  }
+}
+
+void ui_test_click_wifi_connect() {
+  if (g_wifi.connect_button != nullptr) {
+    lv_obj_send_event(g_wifi.connect_button, LV_EVENT_CLICKED, nullptr);
+  }
+}
+
+bool ui_test_wifi_password_visible() {
+  return g_wifi.password_modal != nullptr;
+}
+
+void ui_test_dismiss_wifi_password() { ui::wifi_hide_password(g_wifi); }
 
 void ui_test_click_dashboard_menu() {
   if (g_dashboard.status.menu_button != nullptr) {

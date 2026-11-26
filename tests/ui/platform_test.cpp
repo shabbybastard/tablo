@@ -30,6 +30,41 @@ class TestPlatform final : public IPlatform {
     g_state.set(state);
   }
 
+  void setTimezone(const char* timezone) override {
+    AppState state = g_state.snapshot();
+    std::snprintf(state.timezone, sizeof(state.timezone), "%s", timezone);
+    g_state.update_options(state.date_format, state.weather_enabled,
+                           state.timezone);
+  }
+
+  void setDateFormat(DateFormat format) override {
+    AppState state = g_state.snapshot();
+    g_state.update_options(format, state.weather_enabled, state.timezone);
+  }
+
+  void setWeatherEnabled(bool enabled) override {
+    AppState state = g_state.snapshot();
+    g_state.update_options(state.date_format, enabled, state.timezone);
+    if (!enabled) {
+      WeatherInfo weather;
+      std::snprintf(weather.status, sizeof(weather.status), "Погода выключена");
+      g_state.update_weather(weather);
+    }
+  }
+
+  void requestWifiScan() override {
+    AppState state = g_state.snapshot();
+    WifiScanInfo scan;
+    scan.generation = state.wifi_scan.generation + 1;
+    scan.count = 1;
+    std::snprintf(scan.entries[0].ssid, sizeof(scan.entries[0].ssid), "TestNet");
+    scan.entries[0].rssi = -50;
+    scan.entries[0].secure = true;
+    g_state.update_wifi_scan(scan);
+  }
+
+  void connectWifi(const char*, const char*) override {}
+
   void checkForUpdates() override {
     AppState state = g_state.snapshot();
     state.ota.checked = true;

@@ -22,6 +22,7 @@ struct Dashboard {
   bool last_wifi = false;
 
   lv_obj_t* weather_temp = nullptr;
+  lv_obj_t* weather_icon = nullptr;
   lv_obj_t* weather_condition = nullptr;
   lv_obj_t* weather_feels = nullptr;
   lv_obj_t* aqi_dot = nullptr;

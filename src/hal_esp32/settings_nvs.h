@@ -19,6 +19,9 @@ class NvsSettings : public ISettingsStore {
   void set_brightness(uint8_t percent);
   void set_night_mode(bool enabled);
   void set_schedule(const NightSchedule& schedule);
+  void set_timezone(const char* timezone);
+  void set_date_format(DateFormat format);
+  void set_weather_enabled(bool enabled);
   void tick();  // debounced NVS write for UI-driven runtime changes
 
   /** Hash of the last successfully applied microSD config (0 if none). */
@@ -38,6 +41,7 @@ class NvsSettings : public ISettingsStore {
   bool dirty_ = false;
   uint32_t dirty_since_ = 0;
   bool ready_ = false;
+  bool migrated_ = false;
   bool sd_hash_valid_ = false;
   uint32_t sd_hash_ = 0;
 };

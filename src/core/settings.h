@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+#include "core/date_format.h"
 #include "core/schedule.h"
 
 namespace tablo {
@@ -28,6 +29,8 @@ struct Settings {
   bool night_mode = false;
   bool auto_ota = true;
   NightSchedule schedule;
+  DateFormat date_format = DateFormat::DayMonthWeekday;
+  bool weather_enabled = true;
 };
 
 /** Defaults built from include/secrets.h when present, otherwise placeholders. */

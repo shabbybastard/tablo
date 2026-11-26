@@ -146,7 +146,17 @@ String WebServerService::config_page(const String& message) const {
   field(h, "Заметка на экране", "note", s.note);
   h += "<label><input type=checkbox name=auto_ota ";
   if (s.auto_ota) h += "checked";
-  h += "> Автоматически проверять OTA</label></section>";
+  h += "> Автоматически проверять OTA</label>";
+  h += "<label>Формат даты <select name=date_format>";
+  for (int i = 0; i < 3; ++i) {
+    h += "<option value=";
+    h += i;
+    if (i == static_cast<int>(s.date_format)) h += " selected";
+    h += ">";
+    h += esc(date_format_label(static_cast<DateFormat>(i)));
+    h += "</option>";
+  }
+  h += "</select></label></section>";
 
   char evening[8];
   char night[8];
@@ -171,7 +181,10 @@ String WebServerService::config_page(const String& message) const {
   field(h, "HTTP Basic password", "admin_pass", "", "password");
   h += "</section>";
 
-  h += "<section><h2>Погода / AQI (Open-Meteo)</h2><div class=row>";
+  h += "<section><h2>Погода / AQI (Open-Meteo)</h2>";
+  h += "<label><input type=checkbox name=weather_enabled ";
+  if (s.weather_enabled) h += "checked";
+  h += "> Загружать погоду и AQI</label><div class=row>";
   field(h, "Широта", "wx_lat", s.weather_lat);
   field(h, "Долгота", "wx_lon", s.weather_lon);
   h += "</div></section>";
@@ -248,6 +261,11 @@ void WebServerService::handle_config_post() {
   const int bright = server_.arg("bright").toInt();
   if (bright >= 10 && bright <= 100) s.brightness = static_cast<uint8_t>(bright);
   s.auto_ota = server_.hasArg("auto_ota");
+  s.weather_enabled = server_.hasArg("weather_enabled");
+  const int date_format = server_.arg("date_format").toInt();
+  if (date_format >= 0 && date_format <= 2) {
+    s.date_format = static_cast<DateFormat>(date_format);
+  }
 
   if (s.admin_user[0] == '\0' || s.admin_password[0] == '\0') {
     server_.send(400, "text/html; charset=utf-8",

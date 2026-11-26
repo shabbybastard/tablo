@@ -31,12 +31,17 @@ void status_bar_create(StatusBar& bar, lv_obj_t* parent, const char* menu_text,
   lv_obj_t* brand = make_label(root, "tablo", &theme().accent18);
   lv_obj_set_pos(brand, 28, 8);
 
+  bar.power = make_label(root, "", &theme().muted14);
+  lv_obj_set_pos(bar.power, 78, 10);
+  lv_obj_set_size(bar.power, 100, 20);
+  lv_label_set_long_mode(bar.power, LV_LABEL_LONG_MODE_DOTS);
+
   bar.menu_button = lv_button_create(root);
   lv_obj_remove_style_all(bar.menu_button);
   lv_obj_add_style(bar.menu_button, &theme().button_ghost, 0);
   lv_obj_add_style(bar.menu_button, &theme().button_ghost_pressed,
                    LV_STATE_PRESSED);
-  lv_obj_set_pos(bar.menu_button, 150, 6);
+  lv_obj_set_pos(bar.menu_button, 184, 6);
   lv_obj_set_size(bar.menu_button, 110, 28);
   lv_obj_set_style_shadow_width(bar.menu_button, 0, 0);
   remove_flags(bar.menu_button, LV_OBJ_FLAG_SCROLLABLE);
@@ -54,7 +59,7 @@ void status_bar_create(StatusBar& bar, lv_obj_t* parent, const char* menu_text,
    * fonts used for the clock do not contain the Wi-Fi FontAwesome glyph. */
   bar.wifi_icon = lv_obj_create(root);
   lv_obj_remove_style_all(bar.wifi_icon);
-  lv_obj_set_pos(bar.wifi_icon, 300, 9);
+  lv_obj_set_pos(bar.wifi_icon, 318, 9);
   lv_obj_set_size(bar.wifi_icon, 16, 20);
   remove_flags(bar.wifi_icon,
                LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
@@ -110,6 +115,15 @@ void status_bar_update(StatusBar& bar, const AppState& state) {
   }
 
   char buffer[32];
+  if (state.power.valid) {
+    std::snprintf(buffer, sizeof(buffer), "%.1fV %.1fW",
+                  static_cast<double>(state.power.voltage_v),
+                  static_cast<double>(state.power.power_w));
+  } else {
+    buffer[0] = '\0';
+  }
+  set_label_text(bar.power, buffer);
+
   const char* version =
       state.fw_version[0] != '\0' ? state.fw_version : tablo::kFwVersion;
   std::snprintf(buffer, sizeof(buffer), "v%s", version);

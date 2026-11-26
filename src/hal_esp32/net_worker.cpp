@@ -1,9 +1,13 @@
 #include "net_worker.h"
 
 #include <Arduino.h>
+#include <WiFi.h>
+
+#include <cstring>
 #include <ctime>
 
 #include "backlight.h"
+#include "core/date_format.h"
 #include "core/state_store.h"
 #include "core/version.h"
 #include "http_client.h"
@@ -18,9 +22,6 @@ constexpr uint32_t kWeatherInterval = 15UL * 60UL * 1000UL;
 constexpr uint32_t kPingInterval = 30UL * 1000UL;
 constexpr uint32_t kOtaInterval = 6UL * 60UL * 60UL * 1000UL;
 
-const char* const kMonths[] = {"янв", "фев", "мар", "апр", "мая", "июн",
-                               "июл", "авг", "сен", "окт", "ноя", "дек"};
-const char* const kWeekdays[] = {"Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"};
 }  // namespace
 
 NetWorker::NetWorker(NvsSettings& settings, WifiManager& wifi)
@@ -42,8 +43,21 @@ void NetWorker::task_entry(void* arg) {
   static_cast<NetWorker*>(arg)->run();
 }
 
-void NetWorker::request_update_check() { request_update_ = true; }
-void NetWorker::request_install_update() { request_install_ = true; }
+void NetWorker::request_update_check() {
+  request_update_.store(true, std::memory_order_release);
+}
+void NetWorker::request_install_update() {
+  request_install_.store(true, std::memory_order_release);
+}
+void NetWorker::request_weather_refresh() {
+  request_weather_.store(true, std::memory_order_release);
+}
+void NetWorker::request_timezone_apply() {
+  request_timezone_.store(true, std::memory_order_release);
+}
+void NetWorker::request_wifi_scan() {
+  request_scan_.store(true, std::memory_order_release);
+}
 
 void NetWorker::update_clock(bool force) {
   const uint32_t now_ms = millis();
@@ -52,7 +66,7 @@ void NetWorker::update_clock(bool force) {
 
   const time_t now = time(nullptr);
   const Settings settings = settings_.get();
-  if (now < 1700000000) {
+  if (now < 1700000000 || now > 2100000000) {
     const AppState state = g_state.snapshot();
     if (settings.schedule.enabled &&
         (state.display_mode != DisplayMode::Day || state.night_mode)) {
@@ -74,8 +88,9 @@ void NetWorker::update_clock(bool force) {
   time.valid = true;
   time.hour = static_cast<uint8_t>(local.tm_hour);
   time.minute = static_cast<uint8_t>(local.tm_min);
-  snprintf(time.date_text, sizeof(time.date_text), "%d %s · %s", local.tm_mday,
-           kMonths[local.tm_mon % 12], kWeekdays[local.tm_wday % 7]);
+  format_date_text(time.date_text, sizeof(time.date_text), local.tm_mday,
+                   local.tm_mon + 1, local.tm_year + 1900, local.tm_wday,
+                   settings.date_format);
 
   const uint16_t minute =
       static_cast<uint16_t>(time.hour) * 60U + time.minute;
@@ -106,8 +121,39 @@ void NetWorker::update_wifi_state() {
 }
 
 void NetWorker::fetch_weather(const Settings& settings) {
-  if (settings.weather_lat[0] == '\0' || settings.weather_lon[0] == '\0') return;
-  last_weather_ms_ = millis();
+  if (!settings.weather_enabled) {
+    weather_fail_count_ = 0;
+    next_weather_ms_ = millis() + kWeatherInterval;
+    const AppState state = g_state.snapshot();
+    if (state.weather.valid || state.weather.status[0] == '\0') {
+      WeatherInfo disabled;
+      snprintf(disabled.status, sizeof(disabled.status), "Погода выключена");
+      g_state.update_weather(disabled);
+    }
+    return;
+  }
+  if (settings.weather_lat[0] == '\0' || settings.weather_lon[0] == '\0') {
+    weather_fail_count_ = 0;
+    next_weather_ms_ = millis() + kWeatherInterval;
+    WeatherInfo empty;
+    snprintf(empty.status, sizeof(empty.status), "Не заданы координаты");
+    g_state.update_weather(empty);
+    LOGW("weather: coordinates are not set, skipped");
+    return;
+  }
+
+  static const uint32_t kRetryMs[] = {0, 60000, 300000, 900000, 900000};
+  auto schedule_retry = [this](const char* status) {
+    if (weather_fail_count_ < 4) ++weather_fail_count_;
+    const uint8_t index = weather_fail_count_ > 4 ? 4 : weather_fail_count_;
+    next_weather_ms_ = millis() + kRetryMs[index];
+    const AppState state = g_state.snapshot();
+    if (!state.weather.valid) {
+      WeatherInfo failed;
+      snprintf(failed.status, sizeof(failed.status), "%s", status);
+      g_state.update_weather(failed);
+    }
+  };
 
   String url = "https://api.open-meteo.com/v1/forecast?latitude=";
   url += settings.weather_lat;
@@ -118,11 +164,14 @@ void NetWorker::fetch_weather(const Settings& settings) {
   HttpResponse response;
   WeatherInfo weather;
   if (!http_get(url, 4096, response) || response.status != 200) {
-    LOGW("weather: request failed (%d)", response.status);
+    schedule_retry("Нет связи");
+    LOGW("weather: request failed (%d), next in %u s", response.status,
+         static_cast<unsigned>((next_weather_ms_ - millis()) / 1000U));
     return;
   }
   if (!parse_openmeteo_weather(response.body.c_str(), response.body.length(), weather)) {
-    LOGW("weather: parse failed");
+    schedule_retry("Ошибка ответа");
+    LOGW("weather: parse failed (%u bytes)", static_cast<unsigned>(response.body.length()));
     return;
   }
 
@@ -132,15 +181,53 @@ void NetWorker::fetch_weather(const Settings& settings) {
   air += settings.weather_lon;
   air += "&current=pm2_5,us_aqi";
   HttpResponse air_response;
-  if (http_get(air, 4096, air_response) &&
-      air_response.status == 200) {
+  if (http_get(air, 4096, air_response) && air_response.status == 200) {
     parse_openmeteo_air(air_response.body.c_str(), air_response.body.length(), weather);
+  } else {
+    LOGW("weather: air request failed (%d)", air_response.status);
   }
 
+  weather.status[0] = '\0';
   weather.valid = true;
+  weather_fail_count_ = 0;
+  next_weather_ms_ = millis() + kWeatherInterval;
   g_state.update_weather(weather);
   LOGI("weather: %.0f C, %s, AQI %d", static_cast<double>(weather.temp_c), weather.condition,
        weather.aqi);
+}
+
+void NetWorker::run_wifi_scan() {
+  WifiScanInfo scan;
+  const AppState before = g_state.snapshot();
+  scan.generation = before.wifi_scan.generation + 1;
+  scan.scanning = true;
+  g_state.update_wifi_scan(scan);
+
+  const int found = WiFi.scanNetworks(false, true);
+  scan.scanning = false;
+  if (found > 0) {
+    for (int i = 0; i < found && scan.count < kMaxWifiScan; ++i) {
+      const String ssid = WiFi.SSID(i);
+      if (ssid.isEmpty()) continue;
+      WifiScanEntry& entry = scan.entries[scan.count++];
+      snprintf(entry.ssid, sizeof(entry.ssid), "%s", ssid.c_str());
+      entry.rssi = static_cast<int8_t>(WiFi.RSSI(i));
+      entry.secure = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
+    }
+    // Strongest networks first; the roller is easier to use that way.
+    for (uint8_t i = 1; i < scan.count; ++i) {
+      WifiScanEntry item = scan.entries[i];
+      int j = i - 1;
+      while (j >= 0 && scan.entries[j].rssi < item.rssi) {
+        scan.entries[j + 1] = scan.entries[j];
+        --j;
+      }
+      scan.entries[j + 1] = item;
+    }
+  }
+  WiFi.scanDelete();
+  g_state.update_wifi_scan(scan);
+  LOGI("wifi: scan found %d networks", found);
 }
 
 void NetWorker::update_pings(const Settings& settings) {
@@ -166,14 +253,21 @@ void NetWorker::update_pings(const Settings& settings) {
 
 void NetWorker::check_ota(const Settings& settings, bool force) {
   if (!time_valid_ && !force) return;
-  last_ota_ms_ = millis();
   OtaInfo ota = g_state.snapshot().ota;
   ManifestInfo manifest;
   if (ota_check_manifest(settings, manifest, ota)) {
     manifest_ = manifest;
     manifest_valid_ = true;
+    ota_fail_count_ = 0;
+    next_ota_ms_ = millis() + kOtaInterval;
   } else {
     manifest_valid_ = false;
+    if (ota_fail_count_ < 4) ++ota_fail_count_;
+    static const uint32_t kRetryMs[] = {0, 60000, 300000, 900000, 3600000};
+    const uint8_t index = ota_fail_count_ > 4 ? 4 : ota_fail_count_;
+    next_ota_ms_ = millis() + kRetryMs[index];
+    LOGW("ota: next check in %lu s",
+         static_cast<unsigned long>(kRetryMs[index] / 1000U));
   }
   g_state.update_ota(ota);
 }
@@ -199,34 +293,77 @@ void NetWorker::run() {
     update_wifi_state();
     update_clock(false);
 
+    // Consume UI requests before taking the settings snapshot: the platform
+    // saves settings before setting the flag, so the snapshot sees the new
+    // timezone/weather switch.
+    const bool timezone_requested =
+        request_timezone_.exchange(false, std::memory_order_acq_rel);
+    const bool scan_requested =
+        request_scan_.exchange(false, std::memory_order_acq_rel);
     const Settings settings = settings_.get();
-    if (wifi_.connected()) {
-      if (!ntp_started_) {
+    if (timezone_requested) {
+      ntp_started_ = false;
+      next_ntp_ms_ = millis();
+    }
+    if (scan_requested) {
+      run_wifi_scan();
+    }
+    const bool connected = wifi_.connected();
+    if (connected != wifi_was_connected_) {
+      wifi_was_connected_ = connected;
+      if (connected) {
+        ntp_started_ = false;
+        next_ntp_ms_ = 0;
+      }
+    }
+    if (connected) {
+      const uint32_t now_ms = millis();
+      if (!ntp_started_ || (!time_valid_ && now_ms >= next_ntp_ms_)) {
         configTzTime(settings.timezone, "pool.ntp.org", "time.cloudflare.com");
         ntp_started_ = true;
+        next_ntp_ms_ = now_ms + 30000;
         LOGI("ntp: requested timezone %s", settings.timezone);
       }
-      if (time(nullptr) > 1700000000) time_valid_ = true;
-
-      if (time_valid_) {
-        if (!boot_ota_checked_ && settings.auto_ota && millis() > 15000) {
-          boot_ota_checked_ = true;
-          check_ota(settings, true);
+      const time_t now = time(nullptr);
+      if (now > 1700000000 && now < 2100000000) {
+        if (!time_valid_) {
+          time_valid_ = true;
+          LOGI("ntp: time synced (epoch %lld)", static_cast<long long>(now));
         }
-        if (settings.auto_ota && millis() - last_ota_ms_ > kOtaInterval) {
+      }
+
+      if (!time_valid_ &&
+          request_update_.exchange(false, std::memory_order_acq_rel)) {
+        OtaInfo ota = g_state.snapshot().ota;
+        ota.checked = true;
+        ota.error = true;
+        snprintf(ota.status, sizeof(ota.status), "Нет времени для HTTPS");
+        g_state.update_ota(ota);
+      }
+      if (time_valid_) {
+        if (!boot_ota_checked_) {
+          if (settings.auto_ota && now_ms > 15000) {
+            boot_ota_checked_ = true;
+            check_ota(settings, true);
+          }
+        } else if (settings.auto_ota && now_ms >= next_ota_ms_) {
           check_ota(settings, false);
         }
-        if (request_update_) {
-          request_update_ = false;
+        if (request_update_.exchange(false, std::memory_order_acq_rel)) {
           check_ota(settings, true);
         }
-        if (request_install_) {
-          request_install_ = false;
+        if (request_install_.exchange(false, std::memory_order_acq_rel)) {
           maybe_install_ota(settings);
         }
-        if (millis() - last_weather_ms_ > kWeatherInterval) fetch_weather(settings);
-        if (millis() - last_ping_ms_ > kPingInterval) update_pings(settings);
+        if (request_weather_.exchange(false, std::memory_order_acq_rel) ||
+            now_ms >= next_weather_ms_) {
+          // Re-read at fetch time: the weather switch may have changed after
+          // the loop snapshot.
+          const Settings weather_settings = settings_.get();
+          fetch_weather(weather_settings);
+        }
       }
+      if (millis() - last_ping_ms_ > kPingInterval) update_pings(settings);
     }
     delay(10);
   }

@@ -4,6 +4,7 @@
 #include <cstring>
 #include <string>
 
+#include "core/date_format.h"
 #include "core/json.h"
 #include "core/parsers.h"
 #include "core/settings.h"
@@ -347,6 +348,8 @@ void test_settings_json() {
     "brightness": 42,
     "night_mode": true,
     "auto_ota": false,
+    "weather_enabled": false,
+    "date_format": 2,
     "night_schedule_enabled": true,
     "evening_start": "18:00",
     "night_start": "23:00",
@@ -367,6 +370,8 @@ void test_settings_json() {
   assert(out.brightness == 42);
   assert(out.night_mode);
   assert(!out.auto_ota);
+  assert(!out.weather_enabled);
+  assert(out.date_format == tablo::DateFormat::Numeric);
   assert(out.schedule.enabled);
   assert(out.schedule.evening_min == 18U * 60U);
   assert(out.schedule.night_min == 23U * 60U);
@@ -558,6 +563,19 @@ void test_settings_hash_and_setup() {
 
 }  // namespace
 
+void test_date_format() {
+  char out[32] = {};
+  tablo::format_date_text(out, sizeof(out), 26, 11, 2026, 4,
+                          tablo::DateFormat::DayMonthWeekday);
+  assert(std::strcmp(out, "26 ноя · Чт") == 0);
+  tablo::format_date_text(out, sizeof(out), 26, 11, 2026, 4,
+                          tablo::DateFormat::WeekdayDayMonth);
+  assert(std::strcmp(out, "Чт, 26 ноя") == 0);
+  tablo::format_date_text(out, sizeof(out), 26, 11, 2026, 4,
+                          tablo::DateFormat::Numeric);
+  assert(std::strcmp(out, "26.11.2026") == 0);
+}
+
 int main() {
   test_json_paths();
   test_json_exact_lengths();
@@ -569,6 +587,7 @@ int main() {
   test_settings();
   test_settings_json();
   test_schedule();
+  test_date_format();
   test_settings_hash_and_setup();
 
   std::puts("test_core: all tests passed");

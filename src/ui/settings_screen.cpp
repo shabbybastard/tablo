@@ -85,7 +85,7 @@ void settings_create(SettingsScreen& s, lv_event_cb_t version_cb,
   }
   s.screen = scr;
 
-  status_bar_create(s.status, scr, "Назад", menu_cb, version_cb);
+  status_bar_create(s.status, scr, "←", menu_cb, version_cb);
 
   lv_obj_t* title = make_label(scr, "Настройки", &theme().text28);
   lv_obj_set_pos(title, 14, 48);

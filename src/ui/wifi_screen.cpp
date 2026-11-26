@@ -214,7 +214,7 @@ void wifi_create(WifiScreen& wifi, lv_event_cb_t version_cb,
   lv_obj_set_scrollbar_mode(scr, LV_SCROLLBAR_MODE_OFF);
   wifi.screen = scr;
 
-  status_bar_create(wifi.status, scr, "Назад", menu_cb, version_cb);
+  status_bar_create(wifi.status, scr, "←", menu_cb, version_cb);
 
   lv_obj_t* title = make_label(scr, "Wi-Fi", &theme().text28);
   lv_obj_set_pos(title, 14, 48);

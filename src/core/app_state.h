@@ -36,13 +36,6 @@ struct PingInfo {
   uint16_t ms = 0;
 };
 
-struct PowerInfo {
-  bool valid = false;
-  float voltage_v = 0;
-  float current_a = 0;
-  float power_w = 0;
-};
-
 struct OtaInfo {
   bool available = false;
   bool downloading = false;
@@ -111,7 +104,6 @@ struct AppState {
   WifiScanInfo wifi_scan;
   char wifi_ssid[33] = "";
   char wifi_status[64] = "";
-  PowerInfo power;
   char fw_version[24] = "";
   char note[96] = "";
   uint32_t uptime_s = 0;

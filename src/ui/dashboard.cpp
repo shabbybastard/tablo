@@ -63,7 +63,7 @@ void dashboard_create(Dashboard& d, lv_event_cb_t version_cb,
   }
   d.screen = scr;
 
-  status_bar_create(d.status, scr, "Настройки", menu_cb, version_cb);
+  status_bar_create(d.status, scr, "⚙", menu_cb, version_cb);
 
   /* ---------------------------------------------------------------- clock */
   lv_obj_t* clock_card = make_card(scr, kCardX1, kCardY1, kCardW, kCardH);

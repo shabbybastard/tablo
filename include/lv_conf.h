@@ -16,6 +16,13 @@
    MEMORY SETTINGS
  *====================*/
 #define LV_MEM_SIZE (120U * 1024U)
+
+// The ESP32 build keeps LVGL objects in PSRAM, leaving internal RAM for
+// Wi-Fi, TLS and the web server. Native/WASM builds keep the static pool.
+#if defined(TABLO_ESP32)
+#define LV_MEM_POOL_INCLUDE "lv_mem_pool.h"
+#define LV_MEM_POOL_ALLOC(size) tablo_lv_mem_alloc(size)
+#endif
 #define LV_USE_STDLIB_MALLOC LV_STDLIB_BUILTIN
 #define LV_USE_STDLIB_STRING LV_STDLIB_BUILTIN
 #define LV_USE_STDLIB_SPRINTF LV_STDLIB_BUILTIN

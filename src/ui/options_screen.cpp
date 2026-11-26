@@ -262,7 +262,7 @@ void options_create(OptionsScreen& s, lv_event_cb_t version_cb,
   lv_obj_set_scrollbar_mode(scr, LV_SCROLLBAR_MODE_OFF);
   s.screen = scr;
 
-  status_bar_create(s.status, scr, "Назад", menu_cb, version_cb);
+  status_bar_create(s.status, scr, "←", menu_cb, version_cb);
 
   lv_obj_t* title = make_label(scr, "Экран и сеть", &theme().text28);
   lv_obj_set_pos(title, 14, 48);

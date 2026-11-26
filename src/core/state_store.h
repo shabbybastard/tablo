@@ -34,7 +34,6 @@ class StateStore {
   void update_wifi_scan(const WifiScanInfo& scan);
   void update_wifi_status(const char* status);
   void update_wifi_identity(const char* ssid, const char* status);
-  void update_power(const PowerInfo& power);
 
  private:
   mutable std::mutex mutex_;

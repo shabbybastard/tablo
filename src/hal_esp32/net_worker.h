@@ -51,6 +51,8 @@ class NetWorker {
   uint32_t next_weather_ms_ = 0;
   uint32_t next_ota_ms_ = 0;
   uint32_t next_ntp_ms_ = 0;
+  uint32_t last_ntp_log_ms_ = 0;
+  uint32_t last_heap_log_ms_ = 0;
   uint8_t weather_fail_count_ = 0;
   uint8_t ota_fail_count_ = 0;
   bool ntp_started_ = false;

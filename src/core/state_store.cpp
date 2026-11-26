@@ -142,10 +142,5 @@ void StateStore::update_wifi_identity(const char* ssid, const char* status) {
   ++state_.revision;
 }
 
-void StateStore::update_power(const PowerInfo& power) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  state_.power = power;
-  ++state_.revision;
-}
 
 }  // namespace tablo

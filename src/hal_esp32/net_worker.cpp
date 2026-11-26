@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <esp_sntp.h>
 
 #include <cstring>
 #include <ctime>
@@ -314,15 +315,22 @@ void NetWorker::run() {
       if (connected) {
         ntp_started_ = false;
         next_ntp_ms_ = 0;
+        LOGI("net: wifi ip=%s gw=%s dns=%s rssi=%d",
+             WiFi.localIP().toString().c_str(),
+             WiFi.gatewayIP().toString().c_str(),
+             WiFi.dnsIP().toString().c_str(), WiFi.RSSI());
+      } else {
+        LOGW("net: wifi down");
       }
     }
     if (connected) {
       const uint32_t now_ms = millis();
-      if (!ntp_started_ || (!time_valid_ && now_ms >= next_ntp_ms_)) {
-        configTzTime(settings.timezone, "pool.ntp.org", "time.cloudflare.com");
+      if (!ntp_started_) {
+        configTzTime(settings.timezone, "pool.ntp.org", "time.cloudflare.com",
+                     "162.159.200.1");
         ntp_started_ = true;
-        next_ntp_ms_ = now_ms + 30000;
-        LOGI("ntp: requested timezone %s", settings.timezone);
+        next_ntp_ms_ = now_ms + 60000;
+        LOGI("ntp: request tz='%s'", settings.timezone);
       }
       const time_t now = time(nullptr);
       if (now > 1700000000 && now < 2100000000) {
@@ -330,6 +338,25 @@ void NetWorker::run() {
           time_valid_ = true;
           LOGI("ntp: time synced (epoch %lld)", static_cast<long long>(now));
         }
+      } else if (now_ms >= next_ntp_ms_) {
+        const sntp_sync_status_t status = sntp_get_sync_status();
+        if (status == SNTP_SYNC_STATUS_RESET) {
+          configTzTime(settings.timezone, "pool.ntp.org", "time.cloudflare.com",
+                       "162.159.200.1");
+          LOGI("ntp: restart, status=%d", static_cast<int>(status));
+          next_ntp_ms_ = now_ms + 300000;
+        } else {
+          next_ntp_ms_ = now_ms + 30000;
+        }
+      }
+      if (!time_valid_ && now_ms - last_ntp_log_ms_ >= 30000U) {
+        last_ntp_log_ms_ = now_ms;
+        LOGI("ntp: waiting, status=%d",
+             static_cast<int>(sntp_get_sync_status()));
+      }
+      if (now_ms - last_heap_log_ms_ >= 300000U) {
+        last_heap_log_ms_ = now_ms;
+        LOGI("heap: free=%u max=%u", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
       }
 
       if (!time_valid_ &&

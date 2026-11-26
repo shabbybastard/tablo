@@ -275,10 +275,10 @@ lv_display_t* display_lvgl_create() {
     return nullptr;
   }
 
-  // One partial buffer: 480 x 32 RGB565 pixels = 30720 bytes, kept in
-  // internal DMA-capable RAM as in the proven Arduino_GFX LVGL example. LVGL
-  // renders here and the flush callback copies it into the panel framebuffer.
-  constexpr size_t kDrawBufPixels = board::LCD_WIDTH * 32;
+  // One partial buffer: 480 x 16 RGB565 pixels = 15360 bytes, kept in
+  // internal DMA-capable RAM. 16 lines leave more internal heap for Wi-Fi,
+  // TLS and the web server; LVGL just flushes twice as often.
+  constexpr size_t kDrawBufPixels = board::LCD_WIDTH * 16;
   constexpr size_t kDrawBufBytes = kDrawBufPixels * sizeof(uint16_t);
   s_draw_buf = static_cast<uint16_t*>(heap_caps_malloc(
       kDrawBufBytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA));

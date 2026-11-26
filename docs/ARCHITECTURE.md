@@ -137,8 +137,8 @@ microSD-конфига; старые по-ключевые значения чи
 
 - RGB framebuffer: 480×480×2 ≈ 460 КБ в PSRAM;
 - bounce buffer: 480×16×2 ≈ 15 КБ в PSRAM;
-- LVGL heap: 96 КБ internal;
-- LVGL draw buffer: 480×32×2 ≈ 30 КБ internal DMA;
+- LVGL heap: 120 КБ, выделяется из PSRAM;
+- LVGL draw buffer: 480×16×2 ≈ 15 КБ internal DMA;
 - net task stack 16 КБ, render 8 КБ.
 
 При OOM сначала уменьшать `LV_MEM_SIZE`/draw buffer, не отключать bounce.

@@ -2,6 +2,7 @@
 
 #include <cstdio>
 
+#include "core/miio.h"
 #include "theme.h"
 #include "widgets.h"
 
@@ -40,12 +41,21 @@ const char* weather_symbol(int16_t code) {
   return "\xE2\x98\x81";
 }
 
-void format_ip(const AppState& state, char* out, size_t out_size) {
-  if (state.ip[0] != '\0') {
-    std::snprintf(out, out_size, "IP %s", state.ip);
-  } else {
-    std::snprintf(out, out_size, "IP -");
-  }
+/** 0 unknown/disabled, 1 clean, 2 normal, 3 moderate, 4 bad. */
+int purifier_band(int pm25) {
+  if (pm25 < 0) return 0;
+  if (pm25 <= 15) return 1;
+  if (pm25 <= 35) return 2;
+  if (pm25 <= 55) return 3;
+  return 4;
+}
+
+lv_color_t purifier_color(int band) {
+  if (band == 1) return palette().green;
+  if (band == 2) return palette().accent;
+  if (band == 3) return palette().amber;
+  if (band == 4) return palette().red;
+  return palette().muted;
 }
 
 }  // namespace
@@ -63,42 +73,36 @@ void dashboard_create(Dashboard& d, lv_event_cb_t version_cb,
   }
   d.screen = scr;
 
-  status_bar_create(d.status, scr, "⚙", menu_cb, version_cb);
+  status_bar_create(d.status, scr, "⚙", menu_cb, version_cb, true);
 
   /* ---------------------------------------------------------------- clock */
-  lv_obj_t* clock_card = make_card(scr, kCardX1, kCardY1, kCardW, kCardH);
+  lv_obj_t* clock_card = make_card(scr, kCardX1, kCardY1, 456, kCardH);
 
   lv_obj_t* clock_caption = make_label(clock_card, "СЕЙЧАС", &theme().muted14);
   lv_obj_set_pos(clock_caption, 14, 10);
   lv_obj_set_style_text_letter_space(clock_caption, 2, 0);
 
   d.clock_label = make_label(clock_card, "--:--", &theme().clock48);
-  lv_obj_set_pos(d.clock_label, 14, 30);
-  set_long_label(d.clock_label, 194, 62, LV_LABEL_LONG_MODE_CLIP,
+  lv_obj_set_pos(d.clock_label, 14, 50);
+  set_long_label(d.clock_label, 428, 62, LV_LABEL_LONG_MODE_CLIP,
                  LV_TEXT_ALIGN_CENTER);
 
   d.date_label = make_label(clock_card, "Время не получено",
                             &theme().text18);
-  lv_obj_set_pos(d.date_label, 14, 94);
-  set_long_label(d.date_label, 194, 26, LV_LABEL_LONG_MODE_DOTS,
+  lv_obj_set_pos(d.date_label, 14, 118);
+  set_long_label(d.date_label, 428, 26, LV_LABEL_LONG_MODE_DOTS,
                  LV_TEXT_ALIGN_CENTER);
   lv_obj_set_style_text_color(d.date_label, palette().muted, 0);
 
-  make_divider(clock_card, 14, 126, 194);
+  make_divider(clock_card, 14, 146, 428);
 
-  d.wifi_icon_card = make_dot(clock_card, 14, 146, 8, palette().muted);
-
-  d.wifi_label = make_label(clock_card, "Нет сети", &theme().muted14);
-  lv_obj_set_pos(d.wifi_label, 28, 140);
-  set_long_label(d.wifi_label, 180, 20, LV_LABEL_LONG_MODE_DOTS);
-
-  d.ota_label = make_label(clock_card, "OTA не проверялась", &theme().text14);
-  lv_obj_set_pos(d.ota_label, 14, 166);
-  set_long_label(d.ota_label, 194, 20, LV_LABEL_LONG_MODE_DOTS);
-  lv_obj_set_style_text_color(d.ota_label, palette().muted, 0);
+  d.note_label = make_label(clock_card, "Нет заметки", &theme().muted14);
+  lv_obj_set_pos(d.note_label, 14, 156);
+  set_long_label(d.note_label, 428, 40, LV_LABEL_LONG_MODE_WRAP,
+                 LV_TEXT_ALIGN_CENTER);
 
   /* -------------------------------------------------------------- weather */
-  lv_obj_t* weather_card = make_card(scr, kCardX2, kCardY1, kCardW, kCardH);
+  lv_obj_t* weather_card = make_card(scr, kCardX1, kCardY2, kCardW, kCardH);
 
   lv_obj_t* weather_caption = make_label(weather_card, "ПОГОДА", &theme().muted14);
   lv_obj_set_pos(weather_caption, 14, 10);
@@ -138,60 +142,47 @@ void dashboard_create(Dashboard& d, lv_event_cb_t version_cb,
   set_long_label(d.aqi_quality, 194, 20, LV_LABEL_LONG_MODE_DOTS);
   lv_obj_set_style_text_color(d.aqi_quality, palette().muted, 0);
 
-  /* ---------------------------------------------------------------- net */
-  lv_obj_t* net_card = make_card(scr, kCardX1, kCardY2, kCardW, kCardH);
+  /* ------------------------------------------------------------ purifier */
+  lv_obj_t* purifier_card = make_card(scr, kCardX2, kCardY2, kCardW, kCardH);
 
-  lv_obj_t* net_caption = make_label(net_card, "СЕТЬ", &theme().muted14);
-  lv_obj_set_pos(net_caption, 14, 10);
-  lv_obj_set_style_text_letter_space(net_caption, 2, 0);
+  lv_obj_t* purifier_caption = make_label(purifier_card, "ОЧИСТИТЕЛЬ",
+                                           &theme().muted14);
+  lv_obj_set_pos(purifier_caption, 14, 10);
+  lv_obj_set_style_text_letter_space(purifier_caption, 2, 0);
 
-  d.net_ip = make_label(net_card, "IP -", &theme().text18);
-  lv_obj_set_pos(d.net_ip, 14, 34);
-  set_long_label(d.net_ip, 194, 24, LV_LABEL_LONG_MODE_DOTS);
+  d.purifier_dot = make_dot(purifier_card, 196, 15, 10, palette().muted);
 
-  make_divider(net_card, 14, 64, 194);
+  d.purifier_pm = make_label(purifier_card, "--", &theme().text28);
+  lv_obj_set_pos(d.purifier_pm, 14, 31);
+  set_long_label(d.purifier_pm, 80, 38, LV_LABEL_LONG_MODE_CLIP);
 
-  static const char* const kDefaultPings[3] = {"GW", "VPS", "DNS"};
-  for (int i = 0; i < 3; ++i) {
-    const int32_t y = 78 + i * 38;
-    d.ping_pill[i] = make_dot(net_card, 16, y + 6, 9, palette().muted);
+  lv_obj_t* purifier_metric = make_label(purifier_card, "PM2.5",
+                                          &theme().muted14);
+  lv_obj_set_pos(purifier_metric, 96, 31);
+  lv_obj_set_size(purifier_metric, 100, 18);
 
-    d.ping_name[i] = make_label(net_card, kDefaultPings[i], &theme().muted14);
-    lv_obj_set_pos(d.ping_name[i], 34, y);
-    set_long_label(d.ping_name[i], 64, 20, LV_LABEL_LONG_MODE_DOTS);
+  d.purifier_unit = make_label(purifier_card, "мкг/м3", &theme().muted14);
+  lv_obj_set_pos(d.purifier_unit, 96, 51);
+  set_long_label(d.purifier_unit, 100, 20, LV_LABEL_LONG_MODE_DOTS);
 
-    d.ping_label[i] = make_label(net_card, "-", &theme().accent14);
-    lv_obj_set_pos(d.ping_label[i], 100, y - 1);
-    set_long_label(d.ping_label[i], 108, 22, LV_LABEL_LONG_MODE_CLIP,
-                   LV_TEXT_ALIGN_RIGHT);
-  }
+  d.purifier_detail = make_label(purifier_card, "--° · --%", &theme().text18);
+  lv_obj_set_pos(d.purifier_detail, 14, 76);
+  set_long_label(d.purifier_detail, 194, 24, LV_LABEL_LONG_MODE_DOTS);
 
-  /* --------------------------------------------------------------- note */
-  lv_obj_t* note_card = make_card(scr, kCardX2, kCardY2, kCardW, kCardH);
+  make_divider(purifier_card, 14, 104, 194);
 
-  lv_obj_t* note_caption = make_label(note_card, "ЗАМЕТКА", &theme().muted14);
-  lv_obj_set_pos(note_caption, 14, 10);
-  lv_obj_set_style_text_letter_space(note_caption, 2, 0);
+  d.purifier_filter = make_label(purifier_card, "Фильтр --", &theme().text18);
+  lv_obj_set_pos(d.purifier_filter, 14, 114);
+  set_long_label(d.purifier_filter, 194, 24, LV_LABEL_LONG_MODE_DOTS);
 
-  d.note_label = make_label(note_card, "Нет заметки", &theme().text14);
-  lv_obj_set_pos(d.note_label, 14, 34);
-  set_long_label(d.note_label, 194, 88, LV_LABEL_LONG_MODE_DOTS);
+  d.purifier_mode = make_label(purifier_card, "-", &theme().muted14);
+  lv_obj_set_pos(d.purifier_mode, 14, 144);
+  set_long_label(d.purifier_mode, 194, 20, LV_LABEL_LONG_MODE_DOTS);
 
-  make_divider(note_card, 14, 126, 194);
-
-  lv_obj_t* uptime_caption = make_label(note_card, "Время работы",
-                                        &theme().muted14);
-  lv_obj_set_pos(uptime_caption, 14, 136);
-  set_long_label(uptime_caption, 104, 20, LV_LABEL_LONG_MODE_CLIP);
-
-  d.uptime_label = make_label(note_card, "-", &theme().accent14);
-  lv_obj_set_pos(d.uptime_label, 118, 136);
-  set_long_label(d.uptime_label, 90, 20, LV_LABEL_LONG_MODE_DOTS,
-                 LV_TEXT_ALIGN_RIGHT);
-
-  d.note_ip = make_label(note_card, "IP -", &theme().muted14);
-  lv_obj_set_pos(d.note_ip, 14, 166);
-  set_long_label(d.note_ip, 194, 20, LV_LABEL_LONG_MODE_DOTS);
+  d.purifier_status = make_label(purifier_card, "Не настроено",
+                                  &theme().muted14);
+  lv_obj_set_pos(d.purifier_status, 14, 170);
+  set_long_label(d.purifier_status, 194, 20, LV_LABEL_LONG_MODE_DOTS);
 }
 
 void dashboard_update(Dashboard& d, const AppState& state) {
@@ -217,64 +208,6 @@ void dashboard_update(Dashboard& d, const AppState& state) {
   } else {
     set_label_text(d.clock_label, "--:--");
     set_label_text(d.date_label, "Время не получено");
-  }
-
-  /* Clock card: Wi-Fi + OTA. */
-  if (state.wifi_connected) {
-    if (state.wifi_rssi != 0) {
-      std::snprintf(buffer, sizeof(buffer), "Wi-Fi %d dBm",
-                    static_cast<int>(state.wifi_rssi));
-    } else {
-      std::snprintf(buffer, sizeof(buffer), "Wi-Fi");
-    }
-  } else {
-    std::snprintf(buffer, sizeof(buffer), "Нет сети");
-  }
-  set_label_text(d.wifi_label, buffer);
-
-  if (mode_changed || state.wifi_connected != d.last_wifi) {
-    lv_obj_set_style_bg_color(d.wifi_icon_card,
-                              state.wifi_connected ? p.green : p.muted, 0);
-    lv_obj_set_style_text_color(d.wifi_label,
-                                state.wifi_connected ? p.text : p.muted, 0);
-    d.last_wifi = state.wifi_connected;
-  }
-
-  int ota_kind = 0;
-  if (state.ota.downloading) {
-    ota_kind = 3;
-    std::snprintf(buffer, sizeof(buffer), "Загрузка %d%%",
-                  static_cast<int>(state.ota.progress));
-  } else if (state.ota.available) {
-    ota_kind = 2;
-    if (state.ota.version[0] != '\0') {
-      std::snprintf(buffer, sizeof(buffer), "Обновление %s",
-                    state.ota.version);
-    } else {
-      std::snprintf(buffer, sizeof(buffer), "Доступно обновление");
-    }
-  } else if (state.ota.checked) {
-    ota_kind = state.ota.error ? 4 : 1;
-    if (state.ota.status[0] != '\0') {
-      std::snprintf(buffer, sizeof(buffer), "%s", state.ota.status);
-    } else {
-      std::snprintf(buffer, sizeof(buffer), "Обновлений нет");
-    }
-  } else {
-    std::snprintf(buffer, sizeof(buffer), "OTA не проверялась");
-  }
-  set_label_text_safe(d.ota_label, buffer);
-  if (mode_changed || ota_kind != d.last_ota_kind) {
-    lv_color_t color = p.muted;
-    if (ota_kind == 3 || ota_kind == 2) {
-      color = p.accent;
-    } else if (ota_kind == 1) {
-      color = p.green;
-    } else if (ota_kind == 4) {
-      color = p.red;
-    }
-    lv_obj_set_style_text_color(d.ota_label, color, 0);
-    d.last_ota_kind = ota_kind;
   }
 
   /* Weather + air quality. */
@@ -325,52 +258,107 @@ void dashboard_update(Dashboard& d, const AppState& state) {
     d.last_aqi = state.weather.aqi;
   }
 
-  /* Network card: IP + ping rows. */
-  format_ip(state, buffer, sizeof(buffer));
-  set_label_text_safe(d.net_ip, buffer);
-
-  static const char* const kDefaultNames[3] = {"GW", "VPS", "DNS"};
-  for (int i = 0; i < 3; ++i) {
-    const PingInfo& ping = state.pings[i];
-    const char* name = ping.label[0] != '\0' ? ping.label : kDefaultNames[i];
-    set_label_text_safe(d.ping_name[i], name);
-
-    int ping_state = 0;
-    if (ping.configured) {
-      ping_state = ping.online ? 1 : 2;
-    }
-
-    if (ping_state == 1) {
-      std::snprintf(buffer, sizeof(buffer), "%u мс",
-                    static_cast<unsigned>(ping.ms));
-    } else if (ping_state == 2) {
-      std::snprintf(buffer, sizeof(buffer), "--");
-    } else {
-      std::snprintf(buffer, sizeof(buffer), "-");
-    }
-    set_label_text(d.ping_label[i], buffer);
-
-    if (mode_changed || ping_state != d.last_ping_state[i]) {
-      lv_color_t color = p.muted;
-      if (ping_state == 1) {
-        color = p.green;
-      } else if (ping_state == 2) {
-        color = p.red;
-      }
-      lv_obj_set_style_bg_color(d.ping_pill[i], color, 0);
-      d.last_ping_state[i] = ping_state;
-    }
-  }
-
-  /* Note card: note + uptime + IP. */
   set_label_text_safe(d.note_label,
                       state.note[0] != '\0' ? state.note : "Нет заметки");
 
-  format_uptime(state.uptime_s, buffer, sizeof(buffer));
-  set_label_text(d.uptime_label, buffer);
+  /* ---------------------------------------------------------- purifier */
+  const ExternalInfo& ext = state.external;
+  const int band = ext.valid ? purifier_band(ext.pm25) : 0;
+  if (ext.valid && ext.pm25 >= 0) {
+    std::snprintf(buffer, sizeof(buffer), "%d", static_cast<int>(ext.pm25));
+    set_label_text(d.purifier_pm, buffer);
+  } else {
+    set_label_text(d.purifier_pm, "--");
+  }
 
-  format_ip(state, buffer, sizeof(buffer));
-  set_label_text_safe(d.note_ip, buffer);
+  if (ext.valid) {
+    if (ext.temperature_valid && ext.humidity_valid) {
+      std::snprintf(buffer, sizeof(buffer), "%d° · %d%%",
+                    static_cast<int>(ext.temperature),
+                    static_cast<int>(ext.humidity));
+    } else if (ext.temperature_valid) {
+      std::snprintf(buffer, sizeof(buffer), "%d°",
+                    static_cast<int>(ext.temperature));
+    } else if (ext.humidity_valid) {
+      std::snprintf(buffer, sizeof(buffer), "%d%%",
+                    static_cast<int>(ext.humidity));
+    } else {
+      std::snprintf(buffer, sizeof(buffer), "--° · --%%");
+    }
+    set_label_text(d.purifier_detail, buffer);
+
+    if (ext.filter_life >= 0) {
+      std::snprintf(buffer, sizeof(buffer), "Фильтр %d%%",
+                    static_cast<int>(ext.filter_life));
+    } else {
+      std::snprintf(buffer, sizeof(buffer), "Фильтр --");
+    }
+    set_label_text(d.purifier_filter, buffer);
+
+    if (ext.power_valid && !ext.power) {
+      set_label_text(d.purifier_mode, "Выключен");
+    } else if (ext.mode >= 0) {
+      if (ext.fan_level >= 0) {
+        std::snprintf(buffer, sizeof(buffer), "%s · %d",
+                      miio_mode_text(ext.mode),
+                      static_cast<int>(ext.fan_level));
+      } else {
+        std::snprintf(buffer, sizeof(buffer), "%s", miio_mode_text(ext.mode));
+      }
+      set_label_text(d.purifier_mode, buffer);
+    } else {
+      set_label_text(d.purifier_mode, "-");
+    }
+
+    uint32_t age = 0;
+    if (state.uptime_s >= ext.updated_uptime_s) {
+      age = state.uptime_s - ext.updated_uptime_s;
+    }
+    if (ext.online) {
+      if (age < 60) {
+        set_label_text(d.purifier_status, "Обновлено только что");
+      } else {
+        std::snprintf(buffer, sizeof(buffer), "%u мин назад",
+                      static_cast<unsigned>(age / 60U));
+        set_label_text(d.purifier_status, buffer);
+      }
+    } else if (age < 60) {
+      set_label_text(d.purifier_status, "Нет связи");
+    } else {
+      std::snprintf(buffer, sizeof(buffer), "Нет связи · %u мин",
+                    static_cast<unsigned>(age / 60U));
+      set_label_text(d.purifier_status, buffer);
+    }
+  } else {
+    set_label_text(d.purifier_detail, "--° · --%");
+    set_label_text(d.purifier_filter, "Фильтр --");
+    set_label_text(d.purifier_mode, "-");
+    if (!ext.enabled) {
+      set_label_text(d.purifier_status, "Выключено");
+    } else if (!ext.configured) {
+      set_label_text(d.purifier_status, "Не настроено");
+    } else if (ext.status[0] != '\0') {
+      set_label_text_safe(d.purifier_status, ext.status);
+    } else {
+      set_label_text(d.purifier_status, "Ожидание опроса");
+    }
+  }
+
+  if (mode_changed || band != d.last_purifier_band ||
+      ext.online != d.last_purifier_online ||
+      ext.enabled != d.last_purifier_enabled ||
+      ext.configured != d.last_purifier_configured) {
+    lv_obj_set_style_text_color(d.purifier_pm, purifier_color(band), 0);
+    lv_color_t dot = p.muted;
+    if (ext.enabled && ext.configured) {
+      dot = ext.online ? p.green : (ext.valid ? p.amber : p.red);
+    }
+    lv_obj_set_style_bg_color(d.purifier_dot, dot, 0);
+    d.last_purifier_band = band;
+    d.last_purifier_online = ext.online;
+    d.last_purifier_enabled = ext.enabled;
+    d.last_purifier_configured = ext.configured;
+  }
 
   d.last_mode = theme().mode;
 }

@@ -6,6 +6,8 @@
 
 #include "backlight.h"
 #include "boot_guard.h"
+#include "core/miio.h"
+#include "core/state_store.h"
 #include "log_ring.h"
 #include "qemu.h"
 #include "render.h"
@@ -189,6 +191,29 @@ String WebServerService::config_page(const String& message) const {
   field(h, "Долгота", "wx_lon", s.weather_lon);
   h += "</div></section>";
 
+  h += "<section><h2>Внешние устройства</h2>";
+  h += "<label><input type=checkbox name=purifier_enabled ";
+  if (s.purifier_enabled) h += "checked";
+  h += "> Очиститель Xiaomi (miIO)</label><div class=row>";
+  field(h, "IP-адрес", "purifier_ip", s.purifier_ip, "text",
+        "192.0.2.50");
+  field(h, "Токен (32 hex)", "purifier_token", "", "password",
+        s.purifier_token[0] ? "задан, пусто — не менять" : "32 hex-символа");
+  h += "</div><p class=muted>Опрос по локальной сети каждые 5 минут. "
+       "Пустое поле токена сохраняет текущий токен. Токен не показывается.</p>";
+  const ExternalInfo& external = g_state.snapshot().external;
+  if (external.status[0] != '\0') {
+    h += "<p class=muted>Статус: ";
+    h += esc(external.status);
+    if (external.valid && external.pm25 >= 0) {
+      h += ", PM2.5 ";
+      h += String(static_cast<int>(external.pm25));
+      h += " мкг/м3";
+    }
+    h += "</p>";
+  }
+  h += "</section>";
+
   h += "<section><h2>ICMP</h2><div class=row>";
   field(h, "GW", "ping_gw", s.ping_gw);
   field(h, "VPS", "ping_vps", s.ping_vps);
@@ -247,6 +272,18 @@ void WebServerService::handle_config_post() {
   copy_arg(server_.arg("ping_dns"), s.ping_dns, sizeof(s.ping_dns));
   copy_arg(server_.arg("ota_url"), s.ota_manifest_url, sizeof(s.ota_manifest_url));
 
+  const String purifier_ip = server_.arg("purifier_ip");
+  const String purifier_token = server_.arg("purifier_token");
+  if (purifier_ip.length() > sizeof(s.purifier_ip) - 1 ||
+      purifier_token.length() > sizeof(s.purifier_token) - 1) {
+    server_.send(400, "text/html; charset=utf-8",
+                 config_page("Очиститель: слишком длинный IP или токен"));
+    return;
+  }
+  copy_arg(purifier_ip, s.purifier_ip, sizeof(s.purifier_ip));
+  copy_arg(purifier_token, s.purifier_token, sizeof(s.purifier_token), true);
+  s.purifier_enabled = server_.hasArg("purifier_enabled");
+
   s.schedule.enabled = server_.hasArg("schedule_enabled");
   if (!parse_hhmm(server_.arg("evening_start").c_str(), s.schedule.evening_min) ||
       !parse_hhmm(server_.arg("night_start").c_str(), s.schedule.night_min) ||
@@ -276,6 +313,25 @@ void WebServerService::handle_config_post() {
       std::strcmp(s.admin_password, "change-me") == 0) {
     server_.send(400, "text/html; charset=utf-8",
                  config_page("Пароль администратора — минимум 8 символов"));
+    return;
+  }
+
+  uint8_t purifier_token_bytes[kMiioTokenBytes] = {};
+  if (s.purifier_ip[0] != '\0' && !miio_valid_ipv4(s.purifier_ip)) {
+    server_.send(400, "text/html; charset=utf-8",
+                 config_page("Очиститель: IP должен быть в формате IPv4"));
+    return;
+  }
+  if (s.purifier_token[0] != '\0' &&
+      !miio_parse_token(s.purifier_token, purifier_token_bytes)) {
+    server_.send(400, "text/html; charset=utf-8",
+                 config_page("Очиститель: токен — ровно 32 hex-символа"));
+    return;
+  }
+  if (s.purifier_enabled &&
+      (s.purifier_ip[0] == '\0' || s.purifier_token[0] == '\0')) {
+    server_.send(400, "text/html; charset=utf-8",
+                 config_page("Очиститель: укажите IP и токен или снимите галочку"));
     return;
   }
 

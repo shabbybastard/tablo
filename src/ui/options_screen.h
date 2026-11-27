@@ -22,7 +22,7 @@ struct OptionsScreen {
 
   int timezone_hours = 3;
   DateFormat date_format = DateFormat::DayMonthWeekday;
-  bool last_weather_enabled = true;
+  bool last_weather_enabled = false;
   void* choice = nullptr;
 };
 

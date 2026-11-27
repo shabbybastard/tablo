@@ -31,6 +31,12 @@ struct Settings {
   NightSchedule schedule;
   DateFormat date_format = DateFormat::DayMonthWeekday;
   bool weather_enabled = true;
+
+  /* Xiaomi air purifier (miIO). Appended after the version-2 settings layout;
+   * keep new fields at the end so the NVS migration can read old blobs. */
+  bool purifier_enabled = false;
+  char purifier_ip[16] = "";
+  char purifier_token[33] = "";
 };
 
 /** Defaults built from include/secrets.h when present, otherwise placeholders. */

@@ -35,6 +35,8 @@ class MockProvider {
   void setBrightness(uint8_t percent);
   void setNightMode(bool on);
   void setSchedule(const NightSchedule& schedule);
+  void setExternalConfig(bool enabled, const char* ip, const char* token);
+  void requestExternalRefresh();
 
   const AppState& state() const { return state_; }
   bool loaded() const { return loaded_; }

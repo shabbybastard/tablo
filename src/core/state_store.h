@@ -20,6 +20,7 @@ class StateStore {
   /* Field-level updates keep the network worker from overwriting a mode or
    * brightness change made by the UI in the same tick. */
   void update_weather(const WeatherInfo& weather);
+  void update_external(const ExternalInfo& external);
   void update_pings(const PingInfo* pings);
   void update_ota(const OtaInfo& ota);
   DisplayMode update_clock_and_display(const TimeInfo& time, DisplayMode mode,
@@ -34,6 +35,9 @@ class StateStore {
   void update_wifi_scan(const WifiScanInfo& scan);
   void update_wifi_status(const char* status);
   void update_wifi_identity(const char* ssid, const char* status);
+  void update_system(uint32_t uptime_s, uint16_t cpu_mhz, uint32_t flash_used,
+                     uint32_t flash_total, uint32_t ram_free,
+                     uint32_t ram_total);
 
  private:
   mutable std::mutex mutex_;

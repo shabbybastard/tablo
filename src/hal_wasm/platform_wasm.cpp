@@ -73,9 +73,17 @@ class WasmPlatform final : public tablo::IPlatform {
     }
   }
 
+  void setExternalConfig(bool enabled, const char* ip,
+                         const char* token) override {
+    tablo::mock_provider().setExternalConfig(enabled, ip, token);
+  }
+
+  void requestExternalRefresh() override {
+    tablo::mock_provider().requestExternalRefresh();
+  }
+
   void requestWifiScan() override {
-    tablo::AppState state = tablo::g_state.snapshot();
-    tablo::WifiScanInfo scan;
+    tablo::AppState state = tablo::g_state.snapshot();    tablo::WifiScanInfo scan;
     scan.generation = state.wifi_scan.generation + 1;
     scan.count = 3;
     std::snprintf(scan.entries[0].ssid, sizeof(scan.entries[0].ssid), "Home");

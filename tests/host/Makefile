@@ -10,6 +10,7 @@ SOURCES := \
 	../../src/core/json.cpp \
 	../../src/core/parsers.cpp \
 	../../src/core/state_store.cpp \
+	../../src/core/miio.cpp \
 	../../src/core/settings_defaults.cpp \
 	../../src/core/schedule.cpp \
 	../../src/core/date_format.cpp \
@@ -22,6 +23,7 @@ HEADERS := \
 	../../src/core/date_format.h \
 	../../src/core/json.h \
 	../../src/core/parsers.h \
+	../../src/core/miio.h \
 	../../src/core/schedule.h \
 	../../src/core/settings.h \
 	../../src/core/settings_json.h \

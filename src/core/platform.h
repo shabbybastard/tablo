@@ -29,6 +29,9 @@ class IPlatform {
   virtual void setTimezone(const char* timezone) = 0;
   virtual void setDateFormat(DateFormat format) = 0;
   virtual void setWeatherEnabled(bool enabled) = 0;
+  virtual void setExternalConfig(bool enabled, const char* ip,
+                                 const char* token) = 0;
+  virtual void requestExternalRefresh() = 0;
   virtual void requestWifiScan() = 0;
   virtual void connectWifi(const char* ssid, const char* password) = 0;
   virtual void checkForUpdates() = 0;

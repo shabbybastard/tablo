@@ -31,3 +31,8 @@
 #define TABLO_PING_GW ""
 #define TABLO_PING_VPS ""
 #define TABLO_PING_DNS ""
+
+/* Optional Xiaomi air purifier defaults. The token is 32 hex characters and
+ * is stored in NVS after saving through the web UI. Leave empty here. */
+#define TABLO_PURIFIER_IP ""
+#define TABLO_PURIFIER_TOKEN ""

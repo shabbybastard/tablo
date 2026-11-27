@@ -12,14 +12,21 @@ namespace {
 constexpr const char* kNamespace = "tablo";
 constexpr const char* kBlobKey = "settings";
 constexpr uint32_t kBlobMagic = 0x54424C53u;  // "TBLS"
-constexpr uint16_t kBlobVersion = 2;
+constexpr uint16_t kBlobVersion = 3;
 // Layout from the first public release: used only to migrate existing devices.
 constexpr uint16_t kSettingsV1Size = 766;
 constexpr size_t kBlobV1Size = 780;
-// Version 2 appended fields; the v1 prefix must stay byte-identical for the
-// migration below.
+// Version 2 added date_format and weather_enabled. The old struct was padded
+// to 784 bytes on the 4-byte blob alignment, so the two tail-padding bytes
+// overlap the first new fields when a v2 blob is read into the new struct.
+constexpr uint16_t kSettingsV2Size = 768;
+constexpr size_t kBlobV2Size = 784;
+// Version 3 appended purifier fields; the v1/v2 prefixes must stay
+// byte-identical for the migrations below.
 static_assert(offsetof(Settings, date_format) == kSettingsV1Size,
               "new Settings fields must be appended after the v1 layout");
+static_assert(offsetof(Settings, purifier_enabled) == kSettingsV2Size,
+              "new Settings fields must be appended after the v2 layout");
 
 struct SettingsBlob {
   uint32_t magic;
@@ -32,6 +39,11 @@ struct SettingsBlob {
 
 static_assert(offsetof(SettingsBlob, settings) + kSettingsV1Size == kBlobV1Size,
               "v1 blob layout changed");
+static_assert(offsetof(SettingsBlob, settings) + kSettingsV2Size <= kBlobV2Size &&
+                  kBlobV2Size - (offsetof(SettingsBlob, settings) +
+                                 kSettingsV2Size) <
+                      4,
+              "v2 blob layout changed");
 
 void copy_str(char* dst, size_t cap, const String& value) {
   if (cap == 0) return;
@@ -83,6 +95,22 @@ void NvsSettings::load_locked() {
         sd_hash_valid_ = blob.sd_hash_valid;
         blob_loaded = true;
       }
+    } else if (blob_length == kBlobV2Size) {
+      SettingsBlob blob{};
+      if (prefs_.getBytes(kBlobKey, &blob, kBlobV2Size) == kBlobV2Size &&
+          blob.magic == kBlobMagic && blob.version == 2 &&
+          blob.size == kSettingsV2Size) {
+        settings_ = blob.settings;
+        // The two tail-padding bytes of the old blob landed in the first new
+        // fields; make sure they are not interpreted as configuration.
+        settings_.purifier_enabled = false;
+        settings_.purifier_ip[0] = '\0';
+        settings_.purifier_token[0] = '\0';
+        sd_hash_ = blob.sd_hash;
+        sd_hash_valid_ = blob.sd_hash_valid;
+        migrated_ = true;
+        blob_loaded = true;
+      }
     } else if (blob_length == kBlobV1Size) {
       SettingsBlob blob{};
       if (prefs_.getBytes(kBlobKey, &blob, kBlobV1Size) == kBlobV1Size &&
@@ -91,6 +119,9 @@ void NvsSettings::load_locked() {
         settings_ = blob.settings;
         settings_.date_format = DateFormat::DayMonthWeekday;
         settings_.weather_enabled = true;
+        settings_.purifier_enabled = false;
+        settings_.purifier_ip[0] = '\0';
+        settings_.purifier_token[0] = '\0';
         sd_hash_ = blob.sd_hash;
         sd_hash_valid_ = blob.sd_hash_valid;
         migrated_ = true;
@@ -220,6 +251,35 @@ void NvsSettings::set_weather_enabled(bool enabled) {
   settings_.weather_enabled = enabled;
   dirty_ = true;
   dirty_since_ = millis();
+}
+
+void NvsSettings::set_external(bool enabled, const char* ip,
+                               const char* token) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  bool changed = false;
+
+  if (settings_.purifier_enabled != enabled) {
+    settings_.purifier_enabled = enabled;
+    changed = true;
+  }
+  if (ip != nullptr && std::strcmp(settings_.purifier_ip, ip) != 0) {
+    std::strncpy(settings_.purifier_ip, ip,
+                 sizeof(settings_.purifier_ip) - 1);
+    settings_.purifier_ip[sizeof(settings_.purifier_ip) - 1] = '\0';
+    changed = true;
+  }
+  if (token != nullptr && token[0] != '\0' &&
+      std::strcmp(settings_.purifier_token, token) != 0) {
+    std::strncpy(settings_.purifier_token, token,
+                 sizeof(settings_.purifier_token) - 1);
+    settings_.purifier_token[sizeof(settings_.purifier_token) - 1] = '\0';
+    changed = true;
+  }
+
+  if (changed) {
+    dirty_ = true;
+    dirty_since_ = millis();
+  }
 }
 
 void NvsSettings::set_schedule(const NightSchedule& schedule) {

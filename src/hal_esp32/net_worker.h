@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "core/parsers.h"
+#include "miio_client.h"
 #include "settings_nvs.h"
 #include "wifi_manager.h"
 #include "web_server.h"
@@ -19,6 +20,8 @@ class NetWorker {
   void request_weather_refresh();
   void request_timezone_apply();
   void request_wifi_scan();
+  void request_external_refresh();
+  void reset_external_session();
 
  private:
   static void task_entry(void* arg);
@@ -31,6 +34,8 @@ class NetWorker {
   void update_pings(const Settings& settings);
   void check_ota(const Settings& settings, bool force);
   void maybe_install_ota(const Settings& settings);
+  void sync_external_config(const Settings& settings);
+  void poll_external(const Settings& settings);
 
   NvsSettings& settings_;
   WifiManager& wifi_;
@@ -41,6 +46,11 @@ class NetWorker {
   std::atomic<bool> request_weather_{false};
   std::atomic<bool> request_timezone_{false};
   std::atomic<bool> request_scan_{false};
+  std::atomic<bool> request_external_{false};
+  std::atomic<bool> reset_external_{false};
+
+  MiioClient miio_;
+  char external_model_[32] = {};
 
   ManifestInfo manifest_{};
   bool manifest_valid_ = false;
@@ -51,10 +61,12 @@ class NetWorker {
   uint32_t next_weather_ms_ = 0;
   uint32_t next_ota_ms_ = 0;
   uint32_t next_ntp_ms_ = 0;
+  uint32_t next_external_ms_ = 0;
   uint32_t last_ntp_log_ms_ = 0;
   uint32_t last_heap_log_ms_ = 0;
   uint8_t weather_fail_count_ = 0;
   uint8_t ota_fail_count_ = 0;
+  uint8_t external_fail_count_ = 0;
   bool ntp_started_ = false;
   bool wifi_was_connected_ = false;
   bool time_valid_ = false;

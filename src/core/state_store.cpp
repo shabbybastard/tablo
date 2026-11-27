@@ -60,6 +60,12 @@ void StateStore::update_weather(const WeatherInfo& weather) {
   ++state_.revision;
 }
 
+void StateStore::update_external(const ExternalInfo& external) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  state_.external = external;
+  ++state_.revision;
+}
+
 void StateStore::update_pings(const PingInfo* pings) {
   if (pings == nullptr) {
     return;
@@ -132,6 +138,19 @@ void StateStore::update_wifi_scan(const WifiScanInfo& scan) {
 void StateStore::update_wifi_status(const char* status) {
   std::lock_guard<std::mutex> lock(mutex_);
   copy_text(state_.wifi_status, sizeof(state_.wifi_status), status);
+  ++state_.revision;
+}
+
+void StateStore::update_system(uint32_t uptime_s, uint16_t cpu_mhz,
+                               uint32_t flash_used, uint32_t flash_total,
+                               uint32_t ram_free, uint32_t ram_total) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  state_.uptime_s = uptime_s;
+  state_.cpu_mhz = cpu_mhz;
+  state_.flash_used = flash_used;
+  state_.flash_total = flash_total;
+  state_.ram_free = ram_free;
+  state_.ram_total = ram_total;
   ++state_.revision;
 }
 

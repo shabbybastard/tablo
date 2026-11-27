@@ -6,6 +6,7 @@
 
 #include "core/date_format.h"
 #include "core/json.h"
+#include "core/miio.h"
 #include "core/parsers.h"
 #include "core/settings.h"
 #include "core/schedule.h"
@@ -330,6 +331,109 @@ void test_json_exact_lengths() {
   assert(doc.get_string_length("long") == 10);
 }
 
+void test_miio() {
+  uint8_t token[tablo::kMiioTokenBytes] = {};
+  assert(tablo::miio_parse_token("0123456789abcdef0123456789ABCDEF", token));
+  assert(token[0] == 0x01 && token[15] == 0xEF);
+  assert(!tablo::miio_parse_token("0123456789abcdef", token));
+  assert(!tablo::miio_parse_token("0123456789abcdef0123456789abcdeZ", token));
+  assert(!tablo::miio_parse_token("", token));
+
+  assert(tablo::miio_valid_ipv4("192.0.2.50"));
+  assert(tablo::miio_valid_ipv4("0.0.0.0"));
+  assert(tablo::miio_valid_ipv4("255.255.255.255"));
+  assert(!tablo::miio_valid_ipv4("192.0.2"));
+  assert(!tablo::miio_valid_ipv4("192.0.2.256"));
+  assert(!tablo::miio_valid_ipv4("192.0.2.1 "));
+  assert(!tablo::miio_valid_ipv4("purifier.local"));
+
+  const tablo::MiioMapping* mb3 =
+      tablo::miio_mapping_for_model("zhimi.airpurifier.mb3");
+  assert(mb3 != nullptr && !mb3->legacy_get_prop);
+  assert(mb3->power_siid == 2 && mb3->power_piid == 2);
+  assert(mb3->fan_siid == 2 && mb3->fan_piid == 4);
+  assert(mb3->aqi_siid == 3 && mb3->aqi_piid == 6);
+
+  const tablo::MiioMapping* mb4 =
+      tablo::miio_mapping_for_model("zhimi.airp.mb4a");
+  assert(mb4 != nullptr && mb4->power_piid == 1 && mb4->aqi_piid == 4);
+  assert(mb4->temperature_siid == 0);
+
+  const tablo::MiioMapping* va2 =
+      tablo::miio_mapping_for_model("zhimi.airp.mb5");
+  assert(va2 != nullptr && va2->humidity_siid == 3 && va2->filter_piid == 1);
+
+  const tablo::MiioMapping* legacy =
+      tablo::miio_mapping_for_model("zhimi.airpurifier.mc1");
+  assert(legacy != nullptr && legacy->legacy_get_prop);
+  assert(tablo::miio_model_supported("zhimi.airpurifier.mc1"));
+  assert(tablo::miio_model_supported("zhimi.airp.mb5"));
+  assert(tablo::miio_model_supported("zhimi.airp.rma3"));
+  assert(!tablo::miio_model_supported("some.unknown.model"));
+
+  char request[1024];
+  const size_t request_len =
+      tablo::miio_build_get_properties(7, *va2, request, sizeof(request));
+  assert(request_len > 0);
+  assert(std::strstr(request, "\"method\":\"get_properties\"") != nullptr);
+  assert(std::strstr(request, "\"did\":\"power\",\"siid\":2,\"piid\":1") !=
+         nullptr);
+  assert(std::strstr(request, "\"did\":\"humidity\",\"siid\":3,\"piid\":1") !=
+         nullptr);
+  assert(std::strstr(request, "\"did\":\"tvoc\"") == nullptr);
+
+  char legacy_request[256];
+  assert(tablo::miio_build_get_prop(8, legacy_request,
+                                    sizeof(legacy_request)) > 0);
+  assert(std::strstr(legacy_request, "\"method\":\"get_prop\"") != nullptr);
+
+  const char* miot_response = R"json({
+    "id": 7,
+    "result": [
+      {"did":"power","siid":2,"piid":1,"code":0,"value":true},
+      {"did":"mode","siid":2,"piid":4,"code":0,"value":2},
+      {"did":"fan_level","siid":2,"piid":5,"code":0,"value":3},
+      {"did":"humidity","siid":3,"piid":1,"code":0,"value":45},
+      {"did":"temperature","siid":3,"piid":7,"code":0,"value":22.6},
+      {"did":"aqi","siid":3,"piid":4,"code":0,"value":12},
+      {"did":"filter_life","siid":4,"piid":1,"code":0,"value":81},
+      {"did":"buzzer","siid":6,"piid":1,"code":-4001}
+    ]
+  })json";
+  tablo::MiioReading reading;
+  assert(tablo::miio_parse_miot_properties(miot_response,
+                                           std::strlen(miot_response),
+                                           reading));
+  assert(reading.has_power && reading.power);
+  assert(reading.mode == 2 && reading.fan_level == 3);
+  assert(reading.has_humidity && reading.humidity == 45);
+  assert(reading.has_temperature && reading.temperature == 23);
+  assert(reading.pm25 == 12 && reading.filter_life == 81);
+
+  const char* legacy_response =
+      R"json({"id":8,"result":["on","auto",18,46,234,64]})json";
+  assert(tablo::miio_parse_legacy_props(legacy_response,
+                                        std::strlen(legacy_response),
+                                        reading));
+  assert(reading.has_power && reading.power);
+  assert(reading.mode == 0);
+  assert(reading.pm25 == 18);
+  assert(reading.humidity == 46);
+  assert(reading.temperature == 23);
+  assert(reading.filter_life == 64);
+
+  const char* info =
+      R"json({"id":9,"result":{"model":"zhimi.airp.mb5","fw_ver":"1.0"}})json";
+  char model[32] = {};
+  assert(tablo::miio_parse_model(info, std::strlen(info), model,
+                                 sizeof(model)));
+  assert(std::strcmp(model, "zhimi.airp.mb5") == 0);
+
+  assert(std::strcmp(tablo::miio_mode_text(0), "Авто") == 0);
+  assert(std::strcmp(tablo::miio_quality_text(8), "Чисто") == 0);
+  assert(std::strcmp(tablo::miio_quality_text(200), "Опасно") == 0);
+}
+
 void test_settings_json() {
   const char* json = R"json({
     "config_version": 1,
@@ -382,6 +486,8 @@ void test_settings_json() {
   const char* example = tablo::settings_example_json();
   assert(example != nullptr);
   assert(std::strstr(example, "\"brightness\"") != nullptr);
+  assert(std::strstr(example, "\"purifier_enabled\"") != nullptr);
+  assert(std::strstr(example, "\"purifier_token\"") != nullptr);
   assert(std::strstr(example, "\"tablo-config.example.json\"") == nullptr);
   Settings template_out;
   error[0] = '\0';
@@ -483,6 +589,33 @@ void test_settings_json() {
   assert(!tablo::parse_settings_json("{}", 2, out, error, sizeof(error)));
   assert(std::strstr(error, "wifi_ssid") != nullptr);
   assert(!tablo::parse_settings_json("", 0, out, error, sizeof(error)));
+
+  const char* purifier =
+      R"json({"wifi_ssid":"net","admin_user":"admin","admin_password":"strong-pass-123","purifier_enabled":true,"purifier_ip":"192.0.2.50","purifier_token":"0123456789abcdef0123456789abcdef"})json";
+  assert(tablo::parse_settings_json(purifier, std::strlen(purifier), out, error,
+                                    sizeof(error)));
+  assert(out.purifier_enabled);
+  assert(std::strcmp(out.purifier_ip, "192.0.2.50") == 0);
+  assert(std::strlen(out.purifier_token) == 32);
+
+  const char* bad_token =
+      R"json({"wifi_ssid":"net","admin_user":"admin","admin_password":"strong-pass-123","purifier_token":"not-a-token"})json";
+  assert(!tablo::parse_settings_json(bad_token, std::strlen(bad_token), out,
+                                     error, sizeof(error)));
+  assert(std::strstr(error, "purifier_token") != nullptr);
+
+  const char* bad_ip =
+      R"json({"wifi_ssid":"net","admin_user":"admin","admin_password":"strong-pass-123","purifier_ip":"192.0.2.999"})json";
+  assert(!tablo::parse_settings_json(bad_ip, std::strlen(bad_ip), out, error,
+                                     sizeof(error)));
+  assert(std::strstr(error, "purifier_ip") != nullptr);
+
+  const char* enabled_without_token =
+      R"json({"wifi_ssid":"net","admin_user":"admin","admin_password":"strong-pass-123","purifier_enabled":true,"purifier_ip":"192.0.2.50"})json";
+  assert(!tablo::parse_settings_json(enabled_without_token,
+                                     std::strlen(enabled_without_token), out,
+                                     error, sizeof(error)));
+  assert(std::strstr(error, "Очиститель") != nullptr);
 }
 
 void test_schedule() {
@@ -584,6 +717,7 @@ int main() {
   test_weather();
   test_air();
   test_state_store();
+  test_miio();
   test_settings();
   test_settings_json();
   test_schedule();

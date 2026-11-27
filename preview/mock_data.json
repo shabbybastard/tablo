@@ -12,6 +12,27 @@
     "aqi": 48,
     "condition": "Облачно"
   },
+  "external": {
+    "enabled": true,
+    "configured": true,
+    "valid": true,
+    "online": true,
+    "ip": "192.0.2.50",
+    "token_set": true,
+    "model": "zhimi.airpurifier.mb3",
+    "status": "Подключено",
+    "power": true,
+    "power_valid": true,
+    "mode": 0,
+    "fan_level": 2,
+    "pm25": 8,
+    "temperature": 23,
+    "temperature_valid": true,
+    "humidity": 42,
+    "humidity_valid": true,
+    "filter_life": 76,
+    "updated_uptime_s": 3700
+  },
   "pings": [
     { "label": "GW", "configured": true, "online": true, "ms": 1 },
     { "label": "VPS", "configured": true, "online": true, "ms": 12 },
@@ -19,14 +40,14 @@
   ],
   "ota": {
     "available": false,
-    "version": "1.0.5",
-    "status": "Установлена 1.0.4"
+    "version": "1.0.6",
+    "status": "Установлена 1.0.6"
   },
   "wifi": {
     "connected": true,
     "rssi": -52,
     "ip": "192.0.2.42"
   },
-  "fw_version": "1.0.4",
+  "fw_version": "1.0.6",
   "note": "Ночной режим включится в 23:00"
 }

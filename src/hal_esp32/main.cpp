@@ -8,6 +8,7 @@
 #include "backlight.h"
 #include "board_pins.h"
 #include "boot_guard.h"
+#include "core/miio.h"
 #include "core/platform.h"
 #include "core/settings_json.h"
 #include "core/settings_validate.h"
@@ -85,6 +86,25 @@ void fill_initial_state(const tablo::Settings& settings) {
   }
   copy_text(state.fw_version, sizeof(state.fw_version), tablo::kFwVersion);
   copy_text(state.note, sizeof(state.note), settings.note);
+
+  state.external.enabled = settings.purifier_enabled;
+  copy_text(state.external.ip, sizeof(state.external.ip),
+            settings.purifier_ip);
+  state.external.token_set = settings.purifier_token[0] != '\0';
+  uint8_t token[tablo::kMiioTokenBytes] = {};
+  state.external.configured =
+      tablo::miio_valid_ipv4(settings.purifier_ip) &&
+      tablo::miio_parse_token(settings.purifier_token, token);
+  if (!state.external.enabled) {
+    snprintf(state.external.status, sizeof(state.external.status), "Выключено");
+  } else if (!state.external.configured) {
+    snprintf(state.external.status, sizeof(state.external.status),
+             "Не настроено");
+  } else {
+    snprintf(state.external.status, sizeof(state.external.status),
+             "Ожидание опроса");
+  }
+
   state.ota.checked = false;
   snprintf(state.ota.status, sizeof(state.ota.status), "Проверка при подключении");
   tablo::g_state.set(state);
@@ -332,6 +352,15 @@ void loop() {
       static_cast<uint32_t>(millis() - g_ready_ms) > 10000U) {
     tablo::boot_guard_mark_stable();
     g_stable_announced = true;
+  }
+  static uint32_t last_system_ms = 0;
+  if (millis() - last_system_ms >= 1000U) {
+    last_system_ms = millis();
+    const uint32_t sketch = ESP.getSketchSize();
+    tablo::g_state.update_system(
+        millis() / 1000U, static_cast<uint16_t>(ESP.getCpuFreqMHz()), sketch,
+        sketch + ESP.getFreeSketchSpace(), ESP.getFreeHeap(),
+        ESP.getHeapSize());
   }
   g_settings.tick();
   poll_runtime_sd();

@@ -5,6 +5,7 @@
 #include <atomic>
 
 #include "backlight.h"
+#include "core/miio.h"
 #include "core/platform.h"
 #include "core/state_store.h"
 #include "log_ring.h"
@@ -101,6 +102,59 @@ class Esp32Platform final : public IPlatform {
   void requestWifiScan() override {
     g_state.update_wifi_status("");
     if (g_net) g_net->request_wifi_scan();
+  }
+
+  void setExternalConfig(bool enabled, const char* ip,
+                         const char* token) override {
+    if (g_settings == nullptr) return;
+    g_settings->set_external(enabled, ip, token);
+    if (!g_settings->save_checked(g_settings->get())) {
+      LOGW("ui: external settings not persisted");
+    }
+    const Settings settings = g_settings->get();
+
+    ExternalInfo info = g_state.snapshot().external;
+    info.enabled = settings.purifier_enabled;
+    std::snprintf(info.ip, sizeof(info.ip), "%s", settings.purifier_ip);
+    info.token_set = settings.purifier_token[0] != '\0';
+
+    uint8_t token_bytes[kMiioTokenBytes] = {};
+    const bool token_ok =
+        miio_parse_token(settings.purifier_token, token_bytes);
+    info.configured =
+        miio_valid_ipv4(settings.purifier_ip) && token_ok;
+
+    info.valid = false;
+    info.online = false;
+    info.power_valid = false;
+    info.mode = -1;
+    info.fan_level = -1;
+    info.pm25 = -1;
+    info.temperature_valid = false;
+    info.humidity_valid = false;
+    info.filter_life = -1;
+    info.tvoc = -1;
+
+    if (!info.enabled) {
+      std::snprintf(info.status, sizeof(info.status), "Выключено");
+    } else if (!info.configured) {
+      std::snprintf(info.status, sizeof(info.status), "Не настроено");
+    } else {
+      std::snprintf(info.status, sizeof(info.status), "Ожидание опроса");
+    }
+    g_state.update_external(info);
+
+    if (g_net != nullptr) {
+      g_net->reset_external_session();
+      g_net->request_external_refresh();
+    }
+    LOGI("ui: external enabled=%s ip=%s token=%s",
+         info.enabled ? "on" : "off", info.ip,
+         info.token_set ? "set" : "missing");
+  }
+
+  void requestExternalRefresh() override {
+    if (g_net != nullptr) g_net->request_external_refresh();
   }
 
   void connectWifi(const char* ssid, const char* password) override {

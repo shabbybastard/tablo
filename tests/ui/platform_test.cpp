@@ -2,12 +2,14 @@
 
 #include <cstdio>
 
+#include "core/miio.h"
 #include "core/state_store.h"
 
 namespace tablo {
 namespace {
 int g_reboots = 0;
 int g_last_action = -1;
+int g_external_calls = 0;
 
 class TestPlatform final : public IPlatform {
  public:
@@ -52,9 +54,38 @@ class TestPlatform final : public IPlatform {
     }
   }
 
-  void requestWifiScan() override {
+  void setExternalConfig(bool enabled, const char* ip,
+                         const char* token) override {
+    ++g_external_calls;
     AppState state = g_state.snapshot();
-    WifiScanInfo scan;
+    ExternalInfo& external = state.external;
+    external.enabled = enabled;
+    if (ip != nullptr) {
+      std::snprintf(external.ip, sizeof(external.ip), "%s", ip);
+    }
+    if (token != nullptr && token[0] != '\0') {
+      external.token_set = true;
+    }
+    external.configured = miio_valid_ipv4(external.ip) && external.token_set;
+    external.valid = external.enabled && external.configured;
+    external.online = external.valid;
+    external.pm25 = external.valid ? 12 : -1;
+    external.temperature = 23;
+    external.temperature_valid = external.valid;
+    external.humidity = 45;
+    external.humidity_valid = external.valid;
+    external.filter_life = external.valid ? 80 : -1;
+    external.mode = external.valid ? 0 : -1;
+    external.fan_level = external.valid ? 1 : -1;
+    std::snprintf(external.status, sizeof(external.status), "%s",
+                  external.valid ? "Подключено" : "Не настроено");
+    g_state.set(state);
+  }
+
+  void requestExternalRefresh() override { ++g_external_calls; }
+
+  void requestWifiScan() override {
+    AppState state = g_state.snapshot();    WifiScanInfo scan;
     scan.generation = state.wifi_scan.generation + 1;
     scan.count = 1;
     std::snprintf(scan.entries[0].ssid, sizeof(scan.entries[0].ssid), "TestNet");
@@ -103,5 +134,7 @@ IPlatform& platform() {
 int test_platform_reboots() { return g_reboots; }
 
 int test_platform_last_action() { return g_last_action; }
+
+int test_platform_external_calls() { return g_external_calls; }
 
 }  // namespace tablo

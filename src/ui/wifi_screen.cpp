@@ -114,8 +114,14 @@ void open_password(WifiScreen& screen, const char* ssid) {
   lv_obj_add_style(modal->textarea, &theme().text18, 0);
 
   lv_obj_t* keyboard = lv_keyboard_create(panel);
+  // lv_keyboard's constructor bottom-aligns itself; clear that before
+  // positioning it above the action buttons.
+  lv_obj_set_align(keyboard, LV_ALIGN_DEFAULT);
   lv_obj_set_pos(keyboard, 10, 132);
   lv_obj_set_size(keyboard, 440, 260);
+  // The UI font has Cyrillic but not the FontAwesome PUA glyphs used for
+  // backspace/enter; Montserrat 14 contains them.
+  lv_obj_set_style_text_font(keyboard, &lv_font_montserrat_14, 0);
   lv_keyboard_set_textarea(keyboard, modal->textarea);
 
   lv_obj_t* cancel = lv_button_create(panel);
@@ -294,11 +300,13 @@ void wifi_update(WifiScreen& wifi, const AppState& state) {
     rebuild_networks(wifi, state);
     if (state.wifi_scan.count == 0) {
       set_label_text(wifi.status_label, "Сети не найдены");
+      set_label_text(wifi.footer, "Сети не найдены");
     } else {
       char status[48] = {};
       std::snprintf(status, sizeof(status), "Найдено: %u",
                     static_cast<unsigned>(state.wifi_scan.count));
       set_label_text(wifi.status_label, status);
+      set_label_text(wifi.footer, "Сети с * требуют пароль");
     }
   }
 }

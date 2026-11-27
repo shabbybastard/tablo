@@ -19,8 +19,6 @@ struct SettingsScreen {
   lv_obj_t* night_switch = nullptr;
   lv_obj_t* schedule_button = nullptr;
   lv_obj_t* schedule_summary = nullptr;
-  lv_obj_t* version_value = nullptr;
-  lv_obj_t* ip_value = nullptr;
   lv_obj_t* footer = nullptr;
 
   bool brightness_override = false;
@@ -32,12 +30,11 @@ struct SettingsScreen {
   bool night_desired = false;
   uint32_t night_until = 0;
   bool syncing_switch = false;
-  bool last_update_available = false;
 };
 
 void settings_create(SettingsScreen& settings, lv_event_cb_t version_cb,
                      lv_event_cb_t gesture_cb, lv_event_cb_t menu_cb,
-                     lv_event_cb_t schedule_cb, lv_event_cb_t options_cb);
+                     lv_event_cb_t schedule_cb);
 void settings_update(SettingsScreen& settings, const AppState& state);
 
 }  // namespace ui

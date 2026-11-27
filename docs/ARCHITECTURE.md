@@ -86,15 +86,16 @@ setup screen
 ## Данные
 
 `AppState` — POD-ish структура фиксированного размера: время, погода/AQI,
-пинги, OTA, Wi-Fi/IP, яркость, режим экрана (`Day/Evening/Night`),
-расписание, версия, заметка, uptime, revision. Никаких `std::string` в
-горячем обмене.
+данные очистителя Xiaomi, пинги, OTA, Wi-Fi/IP, яркость, режим экрана
+(`Day/Evening/Night`), расписание, версия, заметка, uptime, revision.
+Никаких `std::string` в горячем обмене.
 
 `IDataProvider` — блокирующий интерфейс, вызывается только из net-задачи.
 Реализация на ESP32 планирует запросы по интервалам:
 
 - NTP — при подключении Wi-Fi;
 - погода/AQI — 15 мин;
+- очиститель Xiaomi (miIO) — 5 мин, при ошибке backoff 30 с…5 мин;
 - ICMP — 30 с;
 - OTA manifest — при старте (через 15 с), раз в 6 ч и по кнопке.
 
@@ -102,12 +103,15 @@ Net-задача также раз в секунду пересчитывает 
 времени. День/вечер/ночь задаются в `NightSchedule`; вечер и ночь
 применяют отдельную палитру и масштабируют подсветку (60% и 25% от дневной).
 WASM-провайдер читает `mock_data.json`, двигает часы и эмулирует OTA.
+miIO-клиент (`hal_esp32/miio_client`) работает только в net-задаче: UDP 54321,
+рукопожатие, AES-128-CBC/MD5, затем `get_properties` (MIoT) или `get_prop`
+(старые 2/2S/Pro). Токен хранится в NVS и никогда не попадает в `AppState`.
 
 ## Настройки и секреты
 
 `NvsSettings` (namespace `tablo`) читает defaults из `include/secrets.h`
 (если есть), затем перекрывает значениями NVS. Настройки пишутся одним
-NVS-blob (`SettingsBlob`, версия 1) вместе с хэшем последнего
+NVS-blob (`SettingsBlob`, версия 3; v1/v2 мигрируют) вместе с хэшем последнего
 microSD-конфига; старые по-ключевые значения читаются как fallback при
 первом обновлении. Запись из UI дебаунсится
 (`set_brightness`/`set_night_mode`/`set_schedule` + `tick()`), из `/config` —
@@ -137,7 +141,7 @@ microSD-конфига; старые по-ключевые значения чи
 
 - RGB framebuffer: 480×480×2 ≈ 460 КБ в PSRAM;
 - bounce buffer: 480×16×2 ≈ 15 КБ в PSRAM;
-- LVGL heap: 120 КБ, выделяется из PSRAM;
+- LVGL heap: 192 КБ, выделяется из PSRAM;
 - LVGL draw buffer: 480×16×2 ≈ 15 КБ internal DMA;
 - net task stack 16 КБ, render 8 КБ.
 

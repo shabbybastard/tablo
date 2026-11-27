@@ -16,10 +16,19 @@ struct Dashboard {
 
   lv_obj_t* clock_label = nullptr;
   lv_obj_t* date_label = nullptr;
-  lv_obj_t* wifi_icon_card = nullptr;
-  lv_obj_t* wifi_label = nullptr;
-  lv_obj_t* ota_label = nullptr;
-  bool last_wifi = false;
+  lv_obj_t* note_label = nullptr;
+
+  lv_obj_t* purifier_dot = nullptr;
+  lv_obj_t* purifier_pm = nullptr;
+  lv_obj_t* purifier_unit = nullptr;
+  lv_obj_t* purifier_detail = nullptr;
+  lv_obj_t* purifier_filter = nullptr;
+  lv_obj_t* purifier_mode = nullptr;
+  lv_obj_t* purifier_status = nullptr;
+  int last_purifier_band = -1;
+  bool last_purifier_online = false;
+  bool last_purifier_enabled = false;
+  bool last_purifier_configured = false;
 
   lv_obj_t* weather_temp = nullptr;
   lv_obj_t* weather_icon = nullptr;
@@ -32,18 +41,7 @@ struct Dashboard {
   bool last_weather_valid = false;
   int last_aqi = -1;
 
-  lv_obj_t* net_ip = nullptr;
-  lv_obj_t* ping_pill[3] = {};
-  lv_obj_t* ping_name[3] = {};
-  lv_obj_t* ping_label[3] = {};
-  int last_ping_state[3] = {-1, -1, -1};
-
-  lv_obj_t* note_label = nullptr;
-  lv_obj_t* uptime_label = nullptr;
-  lv_obj_t* note_ip = nullptr;
-
   DisplayMode last_mode = DisplayMode::Day;
-  int last_ota_kind = -1;
 };
 
 void dashboard_create(Dashboard& dash, lv_event_cb_t version_cb,

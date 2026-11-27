@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include "core/json.h"
+#include "core/miio.h"
 
 namespace tablo {
 namespace {
@@ -27,6 +28,9 @@ constexpr const char kExampleJson[] = R"json({
   "ping_dns": "",
   "ota_manifest_url": "https://shabbybastard.github.io/tablo/manifest.json",
   "note": "",
+  "purifier_enabled": false,
+  "purifier_ip": "",
+  "purifier_token": "",
   "brightness": 80,
   "night_mode": false,
   "auto_ota": true,
@@ -209,6 +213,9 @@ bool parse_settings_json(const char* json, size_t len, Settings& out, char* erro
       {"ota_manifest_url", settings.ota_manifest_url,
        sizeof(settings.ota_manifest_url)},
       {"note", settings.note, sizeof(settings.note)},
+      {"purifier_ip", settings.purifier_ip, sizeof(settings.purifier_ip)},
+      {"purifier_token", settings.purifier_token,
+       sizeof(settings.purifier_token)},
   };
   for (const StringField& field : fields) {
     if (!read_string_field(doc, field.key, field.dst, field.cap, error, error_cap)) {
@@ -235,6 +242,10 @@ bool parse_settings_json(const char* json, size_t len, Settings& out, char* erro
     return false;
   }
   if (!read_bool_field(doc, "weather_enabled", settings.weather_enabled, error,
+                       error_cap)) {
+    return false;
+  }
+  if (!read_bool_field(doc, "purifier_enabled", settings.purifier_enabled, error,
                        error_cap)) {
     return false;
   }
@@ -317,6 +328,27 @@ bool parse_settings_json(const char* json, size_t len, Settings& out, char* erro
   if (settings.ota_manifest_url[0] != '\0' &&
       !starts_with(settings.ota_manifest_url, "https://")) {
     set_field_error(error, error_cap, "ota_manifest_url", "разрешён только https://");
+    return false;
+  }
+
+  uint8_t token[kMiioTokenBytes] = {};
+  if (settings.purifier_ip[0] != '\0' &&
+      !miio_valid_ipv4(settings.purifier_ip)) {
+    set_field_error(error, error_cap, "purifier_ip",
+                    "ожидается IPv4-адрес");
+    return false;
+  }
+  if (settings.purifier_token[0] != '\0' &&
+      !miio_parse_token(settings.purifier_token, token)) {
+    set_field_error(error, error_cap, "purifier_token",
+                    "нужно 32 hex-символа");
+    return false;
+  }
+  if (settings.purifier_enabled &&
+      (settings.purifier_ip[0] == '\0' ||
+       settings.purifier_token[0] == '\0')) {
+    set_error(error, error_cap,
+              "Очиститель: укажите IP и токен или выключите опрос");
     return false;
   }
 

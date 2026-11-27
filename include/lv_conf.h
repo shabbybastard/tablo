@@ -15,7 +15,7 @@
 /*====================
    MEMORY SETTINGS
  *====================*/
-#define LV_MEM_SIZE (120U * 1024U)
+#define LV_MEM_SIZE (192U * 1024U)
 
 // The ESP32 build keeps LVGL objects in PSRAM, leaving internal RAM for
 // Wi-Fi, TLS and the web server. Native/WASM builds keep the static pool.

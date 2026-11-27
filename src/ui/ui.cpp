@@ -2,13 +2,17 @@
 
 #include <lvgl.h>
 
+
 #include "dashboard.h"
+#include "external_screen.h"
 #include "fonts/fonts.h"
 #include "options_screen.h"
 #include "schedule_screen.h"
 #include "sd_import_modal.h"
 #include "settings_screen.h"
+#include "settings_tabs.h"
 #include "setup_screen.h"
+#include "system_screen.h"
 #include "theme.h"
 #include "update_modal.h"
 #include "wifi_screen.h"
@@ -20,6 +24,8 @@ ui::Dashboard g_dashboard;
 ui::SettingsScreen g_settings;
 ui::OptionsScreen g_options;
 ui::WifiScreen g_wifi;
+ui::SystemScreen g_system;
+ui::ExternalScreen g_external;
 ui::ScheduleScreen g_schedule;
 ui::SetupScreen g_setup;
 ui::UpdateModal g_modal;
@@ -61,7 +67,9 @@ void load_screen(lv_obj_t* target) {
   if (target == nullptr || target == lv_screen_active()) {
     return;
   }
-  lv_screen_load_anim(target, LV_SCR_LOAD_ANIM_MOVE_LEFT, 220, 0, false);
+  // The RGB panel redraws slowly enough that a cross-fade shows both
+  // screens at once; an instant switch is cleaner than the old slide.
+  lv_screen_load(target);
 }
 
 void menu_clicked(lv_event_t*) {
@@ -77,9 +85,11 @@ void schedule_clicked(lv_event_t*) { load_screen(g_schedule.screen); }
 
 void schedule_back_cb(lv_event_t*) { load_screen(g_settings.screen); }
 
-void options_clicked(lv_event_t*) { load_screen(g_options.screen); }
-
 void options_back_cb(lv_event_t*) { load_screen(g_settings.screen); }
+
+void system_back_cb(lv_event_t*) { load_screen(g_settings.screen); }
+
+void external_back_cb(lv_event_t*) { load_screen(g_settings.screen); }
 
 void wifi_clicked(lv_event_t*) {
   ui::wifi_refresh(g_wifi);
@@ -104,10 +114,10 @@ void navigate_screen(lv_dir_t dir) {
     return;
   }
   last_nav = lv_tick_get();
-  const lv_screen_load_anim_t anim =
-      dir == LV_DIR_LEFT ? LV_SCR_LOAD_ANIM_MOVE_LEFT
-                         : LV_SCR_LOAD_ANIM_MOVE_RIGHT;
-  lv_screen_load_anim(target, anim, 260, 0, false);
+  (void)dir;
+  // The RGB panel redraws slowly enough that a cross-fade shows both
+  // screens at once; an instant switch is cleaner than the old slide.
+  lv_screen_load(target);
 }
 
 lv_point_t g_swipe_start{};
@@ -143,6 +153,22 @@ void swipe_released(lv_event_t*) { g_swipe_active = false; }
 
 }  // namespace
 
+namespace ui {
+void ui_go_home() { load_screen(g_dashboard.screen); }
+
+void ui_show_settings_tab(int tab) {
+  if (tab == 1) {
+    load_screen(g_options.screen);
+  } else if (tab == 2) {
+    load_screen(g_system.screen);
+  } else if (tab == 3) {
+    load_screen(g_external.screen);
+  } else {
+    load_screen(g_settings.screen);
+  }
+}
+}  // namespace ui
+
 void ui_init(bool setup_active) {
   if (g_ready) {
     return;
@@ -157,9 +183,11 @@ void ui_init(bool setup_active) {
 
   ui::dashboard_create(g_dashboard, version_clicked, nullptr, menu_clicked);
   ui::settings_create(g_settings, version_clicked, nullptr, menu_clicked,
-                      schedule_clicked, options_clicked);
+                      schedule_clicked);
   ui::options_create(g_options, version_clicked, options_back_cb, wifi_clicked);
   ui::wifi_create(g_wifi, version_clicked, wifi_back_cb);
+  ui::system_screen_create(g_system, version_clicked, system_back_cb);
+  ui::external_screen_create(g_external, version_clicked, external_back_cb);
   ui::schedule_screen_create(g_schedule, schedule_back_cb);
   ui::setup_screen_create(g_setup);
   ui::update_modal_create(g_modal);
@@ -201,6 +229,8 @@ void ui_update(const AppState& state) {
   ui::settings_update(g_settings, g_state);
   ui::options_update(g_options, g_state);
   ui::wifi_update(g_wifi, g_state);
+  ui::system_screen_update(g_system, g_state);
+  ui::external_screen_update(g_external, g_state);
   ui::schedule_screen_update(g_schedule, g_state);
   ui::setup_screen_update(g_setup, g_state);
   ui::update_modal_update(g_modal, g_state);
@@ -252,6 +282,32 @@ void ui_test_show_options() {
     lv_screen_load(g_options.screen);
   }
 }
+
+void ui_test_show_system() {
+  if (g_ready && g_system.screen != nullptr) {
+    lv_screen_load(g_system.screen);
+  }
+}
+
+void ui_test_show_external() {
+  if (g_ready && g_external.screen != nullptr) {
+    lv_screen_load(g_external.screen);
+  }
+}
+
+void ui_test_edit_external_ip() { ui::external_edit_ip(g_external); }
+
+void ui_test_edit_external_token() { ui::external_edit_token(g_external); }
+
+bool ui_test_external_modal_visible() {
+  return ui::external_modal_visible(g_external);
+}
+
+void ui_test_set_external_text(const char* text) {
+  ui::external_modal_set_text(g_external, text);
+}
+
+void ui_test_save_external() { ui::external_modal_save(g_external); }
 
 void ui_test_show_wifi() {
   if (g_ready && g_wifi.screen != nullptr) {

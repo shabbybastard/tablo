@@ -9,6 +9,7 @@
 
 #include "backlight.h"
 #include "core/date_format.h"
+#include "core/miio.h"
 #include "core/state_store.h"
 #include "core/version.h"
 #include "http_client.h"
@@ -22,6 +23,7 @@ namespace {
 constexpr uint32_t kWeatherInterval = 15UL * 60UL * 1000UL;
 constexpr uint32_t kPingInterval = 30UL * 1000UL;
 constexpr uint32_t kOtaInterval = 6UL * 60UL * 60UL * 1000UL;
+constexpr uint32_t kExternalInterval = 5UL * 60UL * 1000UL;
 
 }  // namespace
 
@@ -58,6 +60,15 @@ void NetWorker::request_timezone_apply() {
 }
 void NetWorker::request_wifi_scan() {
   request_scan_.store(true, std::memory_order_release);
+}
+void NetWorker::request_external_refresh() {
+  request_external_.store(true, std::memory_order_release);
+}
+void NetWorker::reset_external_session() {
+  // Called from the UI task: only publish a flag. MiioClient is owned by the
+  // net task and must not be touched from another core.
+  reset_external_.store(true, std::memory_order_release);
+  request_external_.store(true, std::memory_order_release);
 }
 
 void NetWorker::update_clock(bool force) {
@@ -119,6 +130,129 @@ void NetWorker::update_wifi_state() {
   const int rssi = wifi_.rssi();
   const String ip = wifi_.ip();
   g_state.update_wifi(connected, static_cast<int8_t>(rssi), ip.c_str());
+}
+
+void NetWorker::sync_external_config(const Settings& settings) {
+  ExternalInfo info = g_state.snapshot().external;
+  info.enabled = settings.purifier_enabled;
+  std::snprintf(info.ip, sizeof(info.ip), "%s", settings.purifier_ip);
+  info.token_set = settings.purifier_token[0] != '\0';
+
+  uint8_t token[kMiioTokenBytes] = {};
+  const bool token_ok = miio_parse_token(settings.purifier_token, token);
+  const bool ip_ok = miio_valid_ipv4(settings.purifier_ip);
+  info.configured = ip_ok && token_ok;
+
+  if (!info.enabled) {
+    info.valid = false;
+    info.online = false;
+    std::snprintf(info.status, sizeof(info.status), "Выключено");
+  } else if (!info.configured) {
+    info.valid = false;
+    info.online = false;
+    std::snprintf(info.status, sizeof(info.status), "Не настроено");
+  } else if (!info.valid) {
+    std::snprintf(info.status, sizeof(info.status), "Ожидание опроса");
+  }
+  g_state.update_external(info);
+}
+
+void NetWorker::poll_external(const Settings& settings) {
+  const uint32_t now_ms = millis();
+  ExternalInfo info = g_state.snapshot().external;
+  info.enabled = settings.purifier_enabled;
+  std::snprintf(info.ip, sizeof(info.ip), "%s", settings.purifier_ip);
+  info.token_set = settings.purifier_token[0] != '\0';
+
+  uint8_t token[kMiioTokenBytes] = {};
+  const bool token_ok = miio_parse_token(settings.purifier_token, token);
+  const bool ip_ok = miio_valid_ipv4(settings.purifier_ip);
+  info.configured = ip_ok && token_ok;
+
+  if (!info.enabled) {
+    info.valid = false;
+    info.online = false;
+    std::snprintf(info.status, sizeof(info.status), "Выключено");
+    external_fail_count_ = 0;
+    next_external_ms_ = now_ms + kExternalInterval;
+    g_state.update_external(info);
+    return;
+  }
+  if (!info.configured) {
+    info.valid = false;
+    info.online = false;
+    std::snprintf(info.status, sizeof(info.status), "Проверьте IP и токен");
+    external_fail_count_ = 0;
+    next_external_ms_ = now_ms + kExternalInterval;
+    g_state.update_external(info);
+    LOGW("miio: not configured (ip=%s token=%s)", ip_ok ? "ok" : "bad",
+         token_ok ? "set" : "missing");
+    return;
+  }
+
+  MiioReading reading;
+  char model[sizeof(external_model_)] = {};
+  char error[48] = {};
+  const bool ok =
+      miio_.poll(settings.purifier_ip, token, external_model_, reading, model,
+                 sizeof(model), error, sizeof(error));
+  if (model[0] != '\0') {
+    std::snprintf(info.model, sizeof(info.model), "%s", model);
+  }
+
+  if (ok) {
+    external_fail_count_ = 0;
+    next_external_ms_ = now_ms + kExternalInterval;
+    std::snprintf(external_model_, sizeof(external_model_), "%s", model);
+
+    info.valid = true;
+    info.online = true;
+    info.power = reading.power;
+    info.power_valid = reading.has_power;
+    info.mode = reading.mode;
+    info.fan_level = reading.fan_level;
+    info.pm25 = reading.pm25;
+    info.temperature = reading.temperature;
+    info.temperature_valid = reading.has_temperature;
+    info.humidity = reading.humidity;
+    info.humidity_valid = reading.has_humidity;
+    info.filter_life = reading.filter_life;
+    info.tvoc = reading.tvoc;
+    info.updated_uptime_s = now_ms / 1000U;
+    std::snprintf(info.model, sizeof(info.model), "%s", model);
+    std::snprintf(info.status, sizeof(info.status), "Подключено");
+    g_state.update_external(info);
+    LOGI("miio: model=%s pm25=%d temp=%d hum=%d filter=%d mode=%d fan=%d",
+         model, static_cast<int>(reading.pm25),
+         reading.has_temperature ? static_cast<int>(reading.temperature) : -1,
+         reading.has_humidity ? static_cast<int>(reading.humidity) : -1,
+         static_cast<int>(reading.filter_life), static_cast<int>(reading.mode),
+         static_cast<int>(reading.fan_level));
+    return;
+  }
+
+  static const uint32_t kRetryMs[] = {30000, 60000, 120000, 300000, 300000};
+  if (external_fail_count_ < 4) ++external_fail_count_;
+  const uint8_t index = external_fail_count_ > 0 ? external_fail_count_ - 1 : 0;
+  next_external_ms_ = now_ms + kRetryMs[index > 4 ? 4 : index];
+
+  info.online = false;
+  if (!info.valid) {
+    info.power_valid = false;
+    info.mode = -1;
+    info.fan_level = -1;
+    info.pm25 = -1;
+    info.temperature_valid = false;
+    info.humidity_valid = false;
+    info.filter_life = -1;
+    info.tvoc = -1;
+  }
+  std::snprintf(info.status, sizeof(info.status), "%s",
+                error[0] != '\0' ? error : "Нет связи");
+  g_state.update_external(info);
+  LOGW("miio: poll failed: %s (next in %u s)",
+       error[0] != '\0' ? error : "no response",
+       static_cast<unsigned>((next_external_ms_ - now_ms) / 1000U));
 }
 
 void NetWorker::fetch_weather(const Settings& settings) {
@@ -288,6 +422,7 @@ void NetWorker::maybe_install_ota(const Settings& settings) {
 void NetWorker::run() {
   update_wifi_state();
   update_clock(true);
+  sync_external_config(settings_.get());
   while (true) {
     web_.loop();
     wifi_.loop();
@@ -315,6 +450,10 @@ void NetWorker::run() {
       if (connected) {
         ntp_started_ = false;
         next_ntp_ms_ = 0;
+        miio_.reset();
+        external_model_[0] = '\0';
+        external_fail_count_ = 0;
+        next_external_ms_ = millis() + 10000;
         LOGI("net: wifi ip=%s gw=%s dns=%s rssi=%d",
              WiFi.localIP().toString().c_str(),
              WiFi.gatewayIP().toString().c_str(),
@@ -389,6 +528,17 @@ void NetWorker::run() {
           const Settings weather_settings = settings_.get();
           fetch_weather(weather_settings);
         }
+      }
+      if (!qemu_detected() &&
+          (request_external_.exchange(false, std::memory_order_acq_rel) ||
+           now_ms >= next_external_ms_)) {
+        if (reset_external_.exchange(false, std::memory_order_acq_rel)) {
+          miio_.reset();
+          external_model_[0] = '\0';
+        }
+        // Re-read at poll time: IP, token and the enable switch can change
+        // while the loop is between iterations.
+        poll_external(settings_.get());
       }
       if (millis() - last_ping_ms_ > kPingInterval) update_pings(settings);
     }

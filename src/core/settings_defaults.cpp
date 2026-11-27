@@ -70,6 +70,18 @@ Settings default_settings() {
   copy_text(settings.ping_dns, sizeof(settings.ping_dns), TABLO_PING_DNS);
 #endif
 
+#if defined(TABLO_PURIFIER_IP)
+  copy_text(settings.purifier_ip, sizeof(settings.purifier_ip),
+            TABLO_PURIFIER_IP);
+#endif
+#if defined(TABLO_PURIFIER_TOKEN)
+  copy_text(settings.purifier_token, sizeof(settings.purifier_token),
+            TABLO_PURIFIER_TOKEN);
+#endif
+  if (settings.purifier_ip[0] != '\0' && settings.purifier_token[0] != '\0') {
+    settings.purifier_enabled = true;
+  }
+
   return settings;
 }
 

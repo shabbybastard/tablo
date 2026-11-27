@@ -17,8 +17,12 @@ struct StatusBar {
 };
 
 void status_bar_create(StatusBar& bar, lv_obj_t* parent, const char* menu_text,
-                       lv_event_cb_t menu_cb, lv_event_cb_t version_cb);
+                       lv_event_cb_t menu_cb, lv_event_cb_t version_cb,
+                       bool menu_right = false);
 void status_bar_update(StatusBar& bar, const AppState& state);
+
+/** Return to the dashboard from a sub-screen header. */
+void ui_go_home();
 
 }  // namespace ui
 }  // namespace tablo

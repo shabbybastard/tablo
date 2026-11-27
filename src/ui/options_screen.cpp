@@ -7,6 +7,7 @@
 #include "core/date_format.h"
 #include "core/platform.h"
 #include "fonts/fonts.h"
+#include "settings_tabs.h"
 #include "theme.h"
 #include "widgets.h"
 
@@ -264,20 +265,26 @@ void options_create(OptionsScreen& s, lv_event_cb_t version_cb,
 
   status_bar_create(s.status, scr, "←", menu_cb, version_cb);
 
-  lv_obj_t* title = make_label(scr, "Экран и сеть", &theme().text28);
-  lv_obj_set_pos(title, 14, 48);
-  lv_obj_set_size(title, 452, 38);
+  settings_tabs_create(scr, 1);
 
-  lv_obj_t* subtitle = make_label(scr, "Локальные настройки", &theme().muted14);
-  lv_obj_set_pos(subtitle, 14, 86);
-  lv_obj_set_size(subtitle, 452, 18);
+  lv_obj_t* title = make_label(scr, "Локальные настройки", &theme().text28);
+  lv_obj_set_pos(title, 14, 94);
+  lv_obj_set_size(title, 452, 32);
 
-  lv_obj_t* panel = make_card(scr, 12, 108, 456, 286);
+  lv_obj_t* panel = make_card(scr, 12, 134, 456, 286);
 
   make_row(panel, 14, "Часовой пояс", timezone_cb, &s, &s.timezone_value);
   lv_obj_t* date_row = make_row(panel, 110, "Формат даты", date_format_cb, &s,
                                 &s.date_format_value);
   (void)date_row;
+
+  lv_obj_t* weather_row = lv_obj_create(panel);
+  lv_obj_remove_style_all(weather_row);
+  lv_obj_add_style(weather_row, &theme().button_ghost, 0);
+  lv_obj_set_pos(weather_row, 16, 62);
+  lv_obj_set_size(weather_row, 424, 40);
+  lv_obj_set_style_shadow_width(weather_row, 0, 0);
+  remove_flags(weather_row, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
 
   lv_obj_t* weather_caption = make_label(panel, "Погода", &theme().text18);
   lv_obj_set_pos(weather_caption, 26, 69);
@@ -308,7 +315,7 @@ void options_create(OptionsScreen& s, lv_event_cb_t version_cb,
   lv_label_set_long_mode(hint, LV_LABEL_LONG_MODE_WRAP);
 
   s.footer = make_label(scr, "Изменения сохраняются автоматически", &theme().muted14);
-  lv_obj_set_pos(s.footer, 12, 406);
+  lv_obj_set_pos(s.footer, 12, 430);
   lv_obj_set_size(s.footer, 456, 20);
   lv_obj_set_style_text_align(s.footer, LV_TEXT_ALIGN_CENTER, 0);
   lv_label_set_long_mode(s.footer, LV_LABEL_LONG_MODE_DOTS);

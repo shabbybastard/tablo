@@ -22,6 +22,7 @@ class NvsSettings : public ISettingsStore {
   void set_timezone(const char* timezone);
   void set_date_format(DateFormat format);
   void set_weather_enabled(bool enabled);
+  void set_external(bool enabled, const char* ip, const char* token);
   void tick();  // debounced NVS write for UI-driven runtime changes
 
   /** Hash of the last successfully applied microSD config (0 if none). */

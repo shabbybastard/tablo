@@ -5,6 +5,7 @@
 #include <string>
 
 #include "core/json.h"
+#include "core/miio.h"
 #include "core/state_store.h"
 
 #ifdef __EMSCRIPTEN__
@@ -27,7 +28,7 @@ EM_JS(void, tablo_preview_local_time, (int* hour, int* minute, char* date_buf, i
       '\u0438\u044e\u043b', '\u0430\u0432\u0433', '\u0441\u0435\u043d',
       '\u043e\u043a\u0442', '\u043d\u043e\u044f', '\u0434\u0435\u043a'
     ];
-    var text = days[now.getDay()] + ', ' + now.getDate() + ' ' + months[now.getMonth()];
+    var text = now.getDate() + ' ' + months[now.getMonth()] + ' · ' + days[now.getDay()];
     var bytes = new TextEncoder().encode(text);
     if (bytes.length >= date_cap) bytes = bytes.slice(0, date_cap - 1);
     HEAPU8.set(bytes, date_buf);
@@ -90,16 +91,27 @@ bool MockProvider::refresh(AppState& state) {
   }
 
   ++tick_count_;
-  if ((tick_count_ & 3u) == 0u) {
-    state_.uptime_s = tick_count_ / 4u;
-  }
-
   updateClock();
   updateDisplayMode();
   processRequests();
   ++state_.revision;
 
+  // The preview HAL publishes scan results and Wi-Fi status directly into
+  // g_state; keep them instead of replacing the whole state with the mock.
+  const WifiScanInfo scan = state.wifi_scan;
+  char wifi_status[sizeof(state.wifi_status)] = {};
+  std::snprintf(wifi_status, sizeof(wifi_status), "%s", state.wifi_status);
+
   state = state_;
+  state.wifi_scan = scan;
+  std::snprintf(state.wifi_status, sizeof(state.wifi_status), "%s",
+                wifi_status);
+  state.uptime_s = 3720U + tick_count_ / 4U;
+  state.cpu_mhz = 240;
+  state.flash_used = 1887184;
+  state.flash_total = 6225152;
+  state.ram_free = 182U * 1024U;
+  state.ram_total = 320U * 1024U;
   return loaded_;
 }
 
@@ -123,6 +135,60 @@ void MockProvider::setNightMode(bool on) {
 void MockProvider::setSchedule(const NightSchedule& schedule) {
   state_.schedule = schedule;
   updateDisplayMode();
+}
+
+void MockProvider::setExternalConfig(bool enabled, const char* ip,
+                                     const char* token) {
+  ExternalInfo& external = state_.external;
+  external.enabled = enabled;
+  if (ip != nullptr) {
+    std::snprintf(external.ip, sizeof(external.ip), "%s", ip);
+  }
+  if (token != nullptr && token[0] != '\0') {
+    external.token_set = true;
+  }
+  external.configured =
+      miio_valid_ipv4(external.ip) && external.token_set;
+
+  if (!external.enabled) {
+    external.valid = false;
+    external.online = false;
+    std::snprintf(external.status, sizeof(external.status), "Выключено");
+  } else if (!external.configured) {
+    external.valid = false;
+    external.online = false;
+    std::snprintf(external.status, sizeof(external.status), "Не настроено");
+  } else {
+    if (!external.valid) {
+      external.valid = true;
+      external.power = true;
+      external.power_valid = true;
+      external.mode = 0;
+      external.fan_level = 2;
+      external.pm25 = 8;
+      external.temperature = 23;
+      external.temperature_valid = true;
+      external.humidity = 42;
+      external.humidity_valid = true;
+      external.filter_life = 76;
+      std::snprintf(external.model, sizeof(external.model),
+                    "zhimi.airpurifier.mb3");
+      external.updated_uptime_s = 3720U + tick_count_ / 4U;
+    }
+    external.online = true;
+    std::snprintf(external.status, sizeof(external.status), "Подключено");
+  }
+  g_state.set(state_);
+}
+
+void MockProvider::requestExternalRefresh() {
+  ExternalInfo& external = state_.external;
+  if (!external.enabled || !external.configured) return;
+  external.valid = true;
+  external.online = true;
+  external.updated_uptime_s = 3720U + tick_count_ / 4U;
+  std::snprintf(external.status, sizeof(external.status), "Подключено");
+  g_state.set(state_);
 }
 
 bool MockProvider::load(const char* mock_path) {
@@ -173,6 +239,37 @@ bool MockProvider::load(const char* mock_path) {
       static_cast<int16_t>(clamp_value<long>(get_long(doc, "weather.aqi"), 0, 32767));
   read_string(doc, "weather.condition", state_.weather.condition,
               sizeof(state_.weather.condition));
+
+  ExternalInfo& external = state_.external;
+  external.enabled = get_bool(doc, "external.enabled");
+  external.configured = get_bool(doc, "external.configured");
+  external.valid = get_bool(doc, "external.valid");
+  external.online = get_bool(doc, "external.online");
+  external.token_set = get_bool(doc, "external.token_set");
+  read_string(doc, "external.ip", external.ip, sizeof(external.ip));
+  read_string(doc, "external.model", external.model, sizeof(external.model));
+  read_string(doc, "external.status", external.status, sizeof(external.status));
+  external.power = get_bool(doc, "external.power");
+  external.power_valid = get_bool(doc, "external.power_valid");
+  external.mode = static_cast<int16_t>(
+      clamp_value<long>(get_long(doc, "external.mode", -1), -1, 15));
+  external.fan_level = static_cast<int16_t>(
+      clamp_value<long>(get_long(doc, "external.fan_level", -1), -1, 15));
+  external.pm25 = static_cast<int16_t>(
+      clamp_value<long>(get_long(doc, "external.pm25", -1), -1, 1000));
+  external.temperature = static_cast<int16_t>(
+      clamp_value<long>(get_long(doc, "external.temperature"), -40, 80));
+  external.temperature_valid = get_bool(doc, "external.temperature_valid");
+  external.humidity = static_cast<int16_t>(
+      clamp_value<long>(get_long(doc, "external.humidity"), 0, 100));
+  external.humidity_valid = get_bool(doc, "external.humidity_valid");
+  external.filter_life = static_cast<int16_t>(
+      clamp_value<long>(get_long(doc, "external.filter_life", -1), -1, 100));
+  external.tvoc = static_cast<int16_t>(
+      clamp_value<long>(get_long(doc, "external.tvoc", -1), -1, 10000));
+  external.updated_uptime_s = static_cast<uint32_t>(
+      clamp_value<long>(get_long(doc, "external.updated_uptime_s"), 0,
+                        2147483647L));
 
   for (size_t i = 0; i < kMaxPingTargets; ++i) {
     state_.pings[i] = PingInfo{};
@@ -315,7 +412,7 @@ void MockProvider::applyFallback() {
   };
   for (size_t i = 0; i < kMaxPingTargets; ++i) state_.pings[i] = ping_defaults[i];
 
-  std::snprintf(ota_version_, sizeof(ota_version_), "1.0.5");
+  std::snprintf(ota_version_, sizeof(ota_version_), "1.0.6");
   state_.ota.available = false;
   state_.ota.checked = false;
   state_.ota.downloading = false;
@@ -326,9 +423,32 @@ void MockProvider::applyFallback() {
   state_.wifi_connected = true;
   state_.wifi_rssi = -52;
   std::snprintf(state_.ip, sizeof(state_.ip), "192.0.2.42");
-  std::snprintf(state_.fw_version, sizeof(state_.fw_version), "1.0.4");
+  std::snprintf(state_.fw_version, sizeof(state_.fw_version), "1.0.6");
   std::snprintf(state_.note, sizeof(state_.note), "mock_data.json не найден");
   state_.brightness = 80;
+
+  state_.external.enabled = true;
+  state_.external.configured = true;
+  state_.external.valid = true;
+  state_.external.online = true;
+  state_.external.token_set = true;
+  std::snprintf(state_.external.ip, sizeof(state_.external.ip),
+                "192.0.2.50");
+  std::snprintf(state_.external.model, sizeof(state_.external.model),
+                "zhimi.airpurifier.mb3");
+  std::snprintf(state_.external.status, sizeof(state_.external.status),
+                "Подключено");
+  state_.external.power = true;
+  state_.external.power_valid = true;
+  state_.external.mode = 0;
+  state_.external.fan_level = 2;
+  state_.external.pm25 = 8;
+  state_.external.temperature = 23;
+  state_.external.temperature_valid = true;
+  state_.external.humidity = 42;
+  state_.external.humidity_valid = true;
+  state_.external.filter_life = 76;
+  state_.external.updated_uptime_s = 3700;
 }
 
 MockProvider& mock_provider() {

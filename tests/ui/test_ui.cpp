@@ -12,6 +12,7 @@
 namespace tablo {
 int test_platform_reboots();
 int test_platform_last_action();
+int test_platform_external_calls();
 }
 
 namespace {
@@ -88,10 +89,12 @@ int main() {
         "mock_provider state populated");
 
   tablo::AppState state = tablo::g_state.snapshot();
-  check(std::strcmp(state.fw_version, "1.0.4") == 0, "fw_version from mock");
+  check(std::strcmp(state.fw_version, "1.0.6") == 0, "fw_version from mock");
   check(state.weather.valid, "weather valid");
   check(state.wifi_connected && std::strcmp(state.ip, "192.0.2.42") == 0,
         "wifi/ip from mock");
+  check(state.external.valid && state.external.pm25 == 8,
+        "purifier data from mock");
 
   lv_init();
   lv_tick_set_cb(tick_cb);
@@ -151,6 +154,53 @@ int main() {
   const uint32_t options_hash = framebuffer_checksum();
   check(options_hash != settings_hash, "options screen changed the framebuffer");
 
+  tablo::ui_test_show_system();
+  tablo::ui_update(state);
+  render_frames(30);
+  check(lv_screen_active() != dashboard, "system screen loaded");
+  check(framebuffer_has_content(), "system screen rendered visible pixels");
+
+  tablo::ui_test_show_external();
+  tablo::ui_update(state);
+  render_frames(30);
+  check(lv_screen_active() != dashboard, "external screen loaded");
+  check(framebuffer_has_content(), "external screen rendered visible pixels");
+  const uint32_t external_hash = framebuffer_checksum();
+  check(external_hash != options_hash,
+        "external screen changed the framebuffer");
+
+  tablo::ui_test_edit_external_ip();
+  render_frames(10);
+  check(tablo::ui_test_external_modal_visible(), "external IP modal shown");
+  tablo::ui_test_set_external_text("192.0.2.60");
+  tablo::ui_test_save_external();
+  render_frames(10);
+  check(!tablo::ui_test_external_modal_visible(),
+        "external IP modal saved and closed");
+  check(std::strcmp(tablo::g_state.snapshot().external.ip, "192.0.2.60") == 0,
+        "external IP saved");
+
+  tablo::ui_test_edit_external_token();
+  render_frames(10);
+  check(tablo::ui_test_external_modal_visible(), "external token modal shown");
+  tablo::ui_test_set_external_text("bad-token");
+  tablo::ui_test_save_external();
+  render_frames(5);
+  check(tablo::ui_test_external_modal_visible(),
+        "invalid token keeps the modal open");
+  tablo::ui_test_set_external_text("0123456789abcdef0123456789abcdef");
+  tablo::ui_test_save_external();
+  render_frames(10);
+  check(!tablo::ui_test_external_modal_visible(),
+        "valid token closes the modal");
+  check(tablo::g_state.snapshot().external.token_set,
+        "external token saved");
+  check(tablo::test_platform_external_calls() >= 2,
+        "external platform setter called");
+  tablo::ui_update(tablo::g_state.snapshot());
+  render_frames(10);
+  check(framebuffer_has_content(), "external screen updated after edits");
+
   tablo::ui_test_show_wifi();
   tablo::ui_update(tablo::g_state.snapshot());
   render_frames(40);
@@ -172,7 +222,7 @@ int main() {
   tablo::ui_update(state);
   render_frames(10);
 
-  tablo::ui_test_show_update_modal("1.0.5", "Доступна новая прошивка");
+  tablo::ui_test_show_update_modal("1.0.6", "Доступна новая прошивка");
   tablo::ui_update(state);
   render_frames(40);
   check(tablo::ui_test_update_modal_visible(), "OTA modal is visible");
@@ -182,7 +232,7 @@ int main() {
   state.ota.available = true;
   state.ota.downloading = true;
   state.ota.progress = 42;
-  std::snprintf(state.ota.version, sizeof(state.ota.version), "1.0.5");
+  std::snprintf(state.ota.version, sizeof(state.ota.version), "1.0.6");
   std::snprintf(state.ota.status, sizeof(state.ota.status),
                 "Загрузка обновления: 42%%");
   tablo::g_state.set(state);
@@ -195,9 +245,9 @@ int main() {
   state.ota.available = false;
   state.ota.downloading = false;
   state.ota.progress = 100;
-  std::snprintf(state.fw_version, sizeof(state.fw_version), "1.0.5");
+  std::snprintf(state.fw_version, sizeof(state.fw_version), "1.0.6");
   std::snprintf(state.ota.status, sizeof(state.ota.status),
-                "Установлено 1.0.5");
+                "Установлено 1.0.6");
   tablo::g_state.set(state);
   tablo::ui_update(state);
   render_frames(20);

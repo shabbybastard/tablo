@@ -36,6 +36,30 @@ struct PingInfo {
   uint16_t ms = 0;
 };
 
+/** Local air purifier data, polled over the miIO protocol. */
+struct ExternalInfo {
+  bool enabled = false;
+  bool configured = false;
+  bool valid = false;   // at least one successful poll
+  bool online = false;  // the latest poll succeeded
+  char ip[16] = "";
+  bool token_set = false;
+  char model[32] = "";
+  char status[48] = "";
+  bool power = false;
+  bool power_valid = false;
+  int16_t mode = -1;
+  int16_t fan_level = -1;
+  int16_t pm25 = -1;
+  int16_t temperature = 0;
+  bool temperature_valid = false;
+  int16_t humidity = 0;
+  bool humidity_valid = false;
+  int16_t filter_life = -1;
+  int16_t tvoc = -1;
+  uint32_t updated_uptime_s = 0;
+};
+
 struct OtaInfo {
   bool available = false;
   bool downloading = false;
@@ -89,6 +113,7 @@ struct WifiScanInfo {
 struct AppState {
   TimeInfo time;
   WeatherInfo weather;
+  ExternalInfo external;
   PingInfo pings[kMaxPingTargets];
   OtaInfo ota;
   bool wifi_connected = false;
@@ -107,6 +132,11 @@ struct AppState {
   char fw_version[24] = "";
   char note[96] = "";
   uint32_t uptime_s = 0;
+  uint16_t cpu_mhz = 0;
+  uint32_t flash_used = 0;
+  uint32_t flash_total = 0;
+  uint32_t ram_free = 0;
+  uint32_t ram_total = 0;
   uint32_t revision = 0;
   SetupInfo setup;
   SdImportInfo sd_import;
